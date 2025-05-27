@@ -1,0 +1,52 @@
+<style> 
+  #analista {
+      text-align: center; /* Centra el texto dentro del párrafo */
+      color: rgb(132, 134, 134); /* Cambia el color del texto a azul */
+      font-weight: bold; /* Hace el texto en negrita */
+  }
+</style>
+<div class="container mt-5 text-center">
+  <fieldset class="border p-3 mb-3">
+    <legend >Preparar Base de Datos</legend>
+    <div class="row  justify-content-center">
+      <p id="analista">Debe tener conexión para realizar estas acciones.</p>
+      <div class="col-md-3">
+        <div class="form-group">
+            <input type="text" id="empleado" class="form-control" placeholder="Empleado">
+        </div>
+      </div>
+    </div>
+  </fieldset>
+  <div class="row  justify-content-center">
+    <div class="col-md-6 d-flex justify-content-center">
+      <button  type="button" class="btn btn-primary" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="ImportaU()">
+        <span>Importar Usuarios</span>
+        <span class="fa fa-database"></span>
+      </button>
+      <button type="button" class="btn btn-primary" id="btnCatalogos" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="ImportaCatalogos()" disabled>
+          <span>Importar Catalogos</span>
+          <span class="fa fa-database"></span>
+      </button>
+      <button type="button" class="btn btn-primary" id="btnMuestra" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="ImportaMuestra()" disabled>
+          <span>Importar Muestra</span>
+          <span class="fa fa-database"></span>
+      </button>
+    </div>
+  </div>
+  <div class="row  justify-content-center mt-1">
+    <div class="col-md-6 d-flex justify-content-center">
+      <button type="button" class="btn btn-warning" id="btnReiniciar" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="LimpiarBase()" disabled>
+        <span>Reinicar Base</span>
+        <span class="fa fa-database"></span>
+      </button>
+      <button type="button" class="btn btn-success" style="margin-right:10px; display: none;" data-tabcontinuar="data-tabcontinuar" id="btn-Descargar" value="Descargar" onclick="exportarBaseDeDatos('IPC')">
+        <span>Descargar Base</span>
+        <span class="fa fa-database"></span>
+      </button>
+      <button type="button" class="btn btn-danger" id="btlEliminaBase" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="EliminarBase()" disabled>
+        <span>Eliminar Base</span>
+        <span class="fa fa-database"></span>
+      </button>
+    </div>
+   </div>
+</div>
