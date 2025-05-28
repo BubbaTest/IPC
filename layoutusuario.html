@@ -156,7 +156,8 @@
                             const informanteId = $(this).val();
                             const variedadDetalle = document.getElementById('variedadDetalle'); 
                             try {
-                                 //? await compararRegistros(informanteId);                                
+                                //? await compararRegistros(informanteId);    
+                                mostrarDiferencias(informanteId);                            
                                 $('#resultadoSelect').select2("val", "ca");
                                 $("#filtrarBtn").prop("disabled", false);
                                 variedadDetalle.style.display = 'none';
