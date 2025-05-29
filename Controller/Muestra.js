@@ -105,8 +105,12 @@ async function filtrarMuestras(informanteId, variedadId) {
                     // Crear fila de tabla
                     const row = document.createElement('tr');
                                        
+                    const especificaCell = document.createElement('td');
+                    especificaCell.textContent =  muestra.Especificacion || 'N/A';
+                    row.appendChild(especificaCell);
+
                     const detalleCell = document.createElement('td');
-                    detalleCell.textContent =  muestra.Especificacion || 'N/A';
+                    detalleCell.textContent =  muestra.Detalle || 'N/A';
                     row.appendChild(detalleCell);
                                         
                     const pesableCell = document.createElement('td');
@@ -620,13 +624,19 @@ function validarCampoTexto(valor, nombreCampo) {
 }
 
 function validarNumero(valor, nombreCampo, esRequerido = false) {
+    // Verificar si el valor es una cadena vacía
+    if (esRequerido && (!valor || valor.trim() === '')) {
+        throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
+    }
     const valorNumerico = Number(valor?.trim());
+    // Validar si el valor no es un número o es negativo
     if (Number.isNaN(valorNumerico) || (esRequerido && valorNumerico < 0)) {
         if (esRequerido) {
             throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
         }
         return 0; // Valor por defecto para campos no requeridos
     }
+    
     return valorNumerico;
 }
 
