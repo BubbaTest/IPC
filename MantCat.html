@@ -19,7 +19,11 @@
   </fieldset>
   <div class="row  justify-content-center">
     <div class="col-md-6 d-flex justify-content-center">
-      <button  type="button" class="btn btn-primary" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="ImportaU()">
+      <button  type="button" class="btn btn-primary" id="btnAutorizar" style="margin-right:10px; display:none;" data-tabcontinuar="data-tabcontinuar" onclick="AutorizarFueraPeriodo()">
+        <span>Autorizar Usuarios</span>
+        <span class="fa fa-database"></span>
+      </button>
+      <button  type="button" class="btn btn-primary" id="btnUsuario" style="margin-right:10px;" data-tabcontinuar="data-tabcontinuar" onclick="ImportaU()">
         <span>Importar Usuarios</span>
         <span class="fa fa-database"></span>
       </button>

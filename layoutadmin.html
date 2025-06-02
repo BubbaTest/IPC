@@ -101,7 +101,8 @@
             new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
             setTimeout(() => window.location.href = "login.html", 2000);
         } else {
-            if (usuarioStr !== 'admin') {
+            if (usuarioStr !== 'admin' && usuarioStr !== 'Connecter') {
+                // Si el usuario no es admin o Connecter, mostrar mensaje de acceso denegado
                 document.getElementById("mensajeModal").textContent = "No tienes permisos para acceder a esta página.";
                 new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
                 setTimeout(() => window.location.href = "login.html", 2000);
@@ -120,6 +121,15 @@
                 })
                 .then(data => {
                     cargavistas.innerHTML = data; 
+
+                    if (view === 'MantCat.html') {
+                        const usuarioStrs = localStorage.getItem('usuarioId');
+                        if (usuarioStrs === 'Connecter') {
+                            // Habilitar botones de importar
+                            document.getElementById('btnUsuario').style.display = 'none';
+                            document.getElementById('btnAutorizar').style.display = 'inline-block';
+                        } 
+                    } 
                 })
                 .catch(error => {
                     console.error('There was a problem with the fetch operation:', error);
@@ -137,6 +147,33 @@
 
             try {
                 const result = await obtenerAlmacenarUsuarios(Empleado);
+                if (result.success) {
+                    mostrarMensaje(`${result.message}`, "success");
+                    $("#btnCatalogos").prop("disabled", false);
+                    $("#btnMuestra").prop("disabled", false);
+                    $("#btnReiniciar").prop("disabled", false);
+                    $("#btlEliminaBase").prop("disabled", false);
+                } else {
+                    mostrarMensaje(`Error al importar usuarios: ${result.message}`, "error");                    
+                }
+            } catch (error) {
+                mostrarMensaje(`Error inesperado: ${error.message}`, "error");
+            }
+        }
+
+        async function AutorizarFueraPeriodo() {
+            const usuarioStr = localStorage.getItem('usuarioId');
+            const claveStr = localStorage.getItem('clave');
+            const Empleado = document.querySelector('#empleado').value.toUpperCase();
+
+            // Validar al menos un empleado seleccionado
+            if (!Empleado) {
+                mostrarMensaje("Por favor, digite código de empleado.", "error");
+                return;
+            }
+
+            try {
+                const result = await obtenerPermisoAlmacenar(Empleado, usuarioStr, claveStr);
                 if (result.success) {
                     mostrarMensaje(`${result.message}`, "success");
                     $("#btnCatalogos").prop("disabled", false);
@@ -274,6 +311,7 @@
     
         function cerrarSesion() {
             localStorage.removeItem('usuarioId'); // Elimina el usuario de localStorage
+            localStorage.removeItem('clave'); 
             //? document.cookie = "usuarioId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             window.location.href = "login.html";
         }

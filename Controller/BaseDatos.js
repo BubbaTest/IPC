@@ -36,42 +36,22 @@ function CrearAlmacen(evento) {
   // Crear el objeto de almacenamiento para 'Users'
   if (!db.objectStoreNames.contains('Users')) {
       const usersStore = db.createObjectStore('Users', { keyPath: 'UsuarioId' });
-      usersStore.createIndex('UsuarioId', 'UsuarioId', { unique: true });      
+      usersStore.createIndex('UsuarioId', 'UsuarioId', { unique: true });     
+      
+      usersStore.transaction.oncomplete = () => {
+            const transaction = db.transaction(['Users'], 'readwrite');
+            const store = transaction.objectStore('Users');
+    
+            // Agregar el usuario admin con una contraseña por defecto
+            store.add({ UsuarioId: 'admin', password: '9175E455384B20A983DDAB1408E35E3F3789B794' }); 
+            store.add({ UsuarioId: 'Connecter', password: '2FF731A2CCA6918F55903702391A2D1A1AF6CF51' });
+      }
   }
 
   // Crear el objeto de almacenamiento para 'Semana'
   if (!db.objectStoreNames.contains('Semana')) {
     const semanaStore = db.createObjectStore('Semana', { keyPath: 'id' });
     semanaStore.createIndex('id', 'id', { unique: true });
-    
-    // Agregar semanas
-    semanaStore.transaction.oncomplete = () => {
-        const transaction1 = db.transaction(['Semana'], 'readwrite');
-        const store1 = transaction1.objectStore('Semana');
-
-        // Crear un array de semanas
-        const semanas = [
-            { id: '1', descripcion: 'Semana 1' },
-            { id: '2', descripcion: 'Semana 2' },
-            { id: '3', descripcion: 'Semana 3' },
-            { id: '4', descripcion: 'Semana 4' }
-        ];
-
-        // Agregar cada semana a la tienda
-        for (const semana of semanas) {
-            const request = store1.add(semana);
-            request.onerror = (event) => {
-                console.error('Error al agregar la semana:', event.target.error);
-            };
-            request.onsuccess = (event) => {
-                console.log('Semana agregada con éxito:', semana);
-            };
-        }     
-        
-        const transaction = db.transaction(['Users'], 'readwrite');
-        const store = transaction.objectStore('Users');
-        store.add({ UsuarioId: 'admin', password: 'clave' }); 
-    };
   }  
 
   // Crear el objeto de almacenamiento para 'Muestra'
@@ -126,14 +106,7 @@ function CrearAlmacen(evento) {
             keyPath: ['codproducto', 'urecol'] // ✅ Clave compuesta
         });
         almacenUmedp.createIndex('Buscarurecol', 'urecol', { unique: false });
-    }
-
-    // if (!db.objectStoreNames.contains('Numerador')) {
-    //     const almacenNumerador = db.createObjectStore('Numerador', { 
-    //         keyPath: 'informanteId' // Cambiado a una cadena
-    //     });
-    //     almacenNumerador.createIndex('BuscarCantidad', 'cantidad', { unique: false });
-    // }
+    }    
 }
 
 async function validarLogin(usuarioId, password) {
@@ -171,7 +144,7 @@ async function validarLogin(usuarioId, password) {
 
 async function obtenerAlmacenarUsuarios(empleado) {
     try {
-        const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/Connecter/${empleado}`, {
+        const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/Connecter/${empleado}`, {        
             method: 'POST',
             headers: {
                 'Accept': 'application/json'
@@ -179,8 +152,11 @@ async function obtenerAlmacenarUsuarios(empleado) {
             mode: 'cors'
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+         if (!response.ok) {
+            // Capturar el mensaje de error del cuerpo de la respuesta
+            const errorResponse = await response.json();
+            const errorMessage = errorResponse.mensaje || `Error en la solicitud HTTP: ${response.status}`;
+            throw new Error(errorMessage);
         }
 
         const user = await response.json();
@@ -235,6 +211,69 @@ async function obtenerAlmacenarUsuarios(empleado) {
     }
 }
 
+async function obtenerPermisoAlmacenar(empleado, usuario, clave) {
+    try {
+        // Construir la URL base https://appcepov.inide.gob.ni
+        let url = `https://appcepov.inide.gob.ni/endpoint/cipc/Einkommen/${empleado}/${usuario}`;
+
+        // Agregar clave a la URL
+        if (clave) {
+            url += `?clave=${encodeURIComponent(clave)}`;
+        }
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json'
+            },
+            mode: 'cors'
+        });
+
+         if (!response.ok) {
+            // Capturar el mensaje de error del cuerpo de la respuesta
+            const errorResponse = await response.json();
+            const errorMessage = errorResponse.mensaje || `Error en la solicitud HTTP: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+
+        const user = await response.json();
+        console.log('Usuarios Obtenidos:', user);
+       
+        if (!user?.idEmpleado) {
+            throw new Error('Formato de Respuesta No Válido');
+        }
+
+        const db = await IniciarBaseDatos();
+        const tx = db.transaction('Users', 'readwrite');
+        const store = tx.objectStore('Users');
+
+        // Eliminar usuarios existentes excepto admin
+        const existingUsers = await new Promise((resolve, reject) => {
+            const request = store.getAllKeys();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+
+        for (const key of existingUsers) {
+            if (key !== 'admin' && key !== 'Connecter') {
+                await store.delete(key);
+            }
+        }
+
+        // Almacenar el nuevo usuario
+        await store.put({
+            UsuarioId: user.idEmpleado,
+            password: "9175e455384b20a983ddab1408e35e3f3789b794" // Puedes cambiar la clave según sea necesario
+        });
+
+        await tx.done; // Asegúrate de que la transacción se complete
+        return { success: true, message: 'Usuarios importados y almacenados correctamente.' };
+    } catch (error) {
+        console.error('Error al Obtener y Almacenar Usuarios:', error);
+        return { success: false, message: error.message };
+    }
+}
+
 async function obtenerAlmacenarCatalogos(empleado) {
     try {
         // Obtener datos desde la API
@@ -252,7 +291,7 @@ async function obtenerAlmacenarCatalogos(empleado) {
 
         const catalog = await response.json();
 
-        if (!catalog || !Array.isArray(catalog.informantes) || !Array.isArray(catalog.variedades) || !Array.isArray(catalog.diasSemana) || !Array.isArray(catalog.umedP)) {
+        if (!catalog || !Array.isArray(catalog.informantes) || !Array.isArray(catalog.variedades) || !Array.isArray(catalog.diasSemana) || !Array.isArray(catalog.umedP) || !Array.isArray(catalog.semana)) {
             throw new Error('Formato de respuesta inválido');
         }
 
@@ -309,9 +348,21 @@ async function obtenerAlmacenarCatalogos(empleado) {
         }
         await txUmedP.done;
 
+        //Insertar Semana
+        const txSemana = db.transaction('Semana', 'readwrite');
+        const semanaStore = txSemana.objectStore('Semana');
+        
+        for (const ssemana of catalog.semana) {
+            await semanaStore.put({
+                id: ssemana.id,
+                descripcion: ssemana.descripcion.trim()
+            });
+        }
+        await txSemana.done;
+
         return { 
             success: true, 
-            message: `Datos almacenados: ${catalog.informantes.length} informantes , ${catalog.variedades.length} variedades , ${catalog.diasSemana.length} dias y ${catalog.umedP.length} unidad medida`
+            message: `Datos almacenados: ${catalog.informantes.length} informantes , ${catalog.variedades.length} variedades , ${catalog.diasSemana.length} dias ,  ${catalog.umedP.length} unidad medida y ${catalog.semana.length} semanas`
         }; 
 
     } catch (error) {
@@ -336,7 +387,7 @@ async function obtenerAlmacenarMuestra(empleado) {
 
         if (!response.ok) {
             throw new Error(`Error en la solicitud HTTP: ${response.status}`);
-        }
+        }        
 
         const catalog = await response.json();
 
@@ -357,6 +408,7 @@ async function obtenerAlmacenarMuestra(empleado) {
                 Fecha: muestra.fecha,
                 Descripcion : muestra.descripcion,
                 Especificacion : muestra.especificacion,
+                Detalle : muestra.detalle,
                 muestraid : muestra.muestraid,
                 Semana : muestra.semana,
                 DiaSemanaId : muestra.diaSemanaId,
@@ -517,6 +569,22 @@ async function validarRegistrosMuestraEnSeriesPrecios() {
     console.error("Error al validar registros:", error);
     mostrarMensaje('Error al validar registros.', 'error');
   }
+}
+
+// Función para hashear una cadena usando SHA-1
+async function hashPassword(password) {
+    // Convertir la contraseña a un Uint8Array (formato binario)
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+
+    // Generar el hash usando SHA-1
+    const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+
+    // Convertir el hash a una representación hexadecimal
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+
+    return hashHex; // Devolver el hash en formato hexadecimal
 }
 
 // function eleminar store

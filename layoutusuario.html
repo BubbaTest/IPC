@@ -373,6 +373,7 @@
     
         function cerrarSesion() {
             localStorage.removeItem('usuarioId'); // Elimina el usuario de localStorage
+            localStorage.removeItem('clave'); 
             //? document.cookie = "usuarioId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;";
             window.location.href = "login.html";
         }
