@@ -44,7 +44,7 @@ function CrearAlmacen(evento) {
     
             // Agregar el usuario admin con una contraseña por defecto
             store.add({ UsuarioId: 'admin', password: '9175E455384B20A983DDAB1408E35E3F3789B794' }); 
-            store.add({ UsuarioId: 'Connecter', password: '2FF731A2CCA6918F55903702391A2D1A1AF6CF51' });
+            store.add({ UsuarioId: 'Autoriza', password: '2FF731A2CCA6918F55903702391A2D1A1AF6CF51' });
       }
   }
 
@@ -54,23 +54,28 @@ function CrearAlmacen(evento) {
     semanaStore.createIndex('id', 'id', { unique: true });
   }  
 
-  // Crear el objeto de almacenamiento para 'Muestra'
-  if (!db.objectStoreNames.contains('Muestra')) {
-    const almacenMuestra = db.createObjectStore('Muestra', { 
-        keyPath: ['InformanteId', 'VariedadId'] 
-         });
-    almacenMuestra.createIndex('BuscarxInformante', 'InformanteId', { unique: false }); 
-    almacenMuestra.createIndex('BuscarDian', 'DiaSemanaId', { unique: false }); 
-    almacenMuestra.createIndex('BuscarSemana', 'Semana', { unique: false }); 
-  }
+    // Crear el objeto de almacenamiento para 'Muestra'
+    if (!db.objectStoreNames.contains('Muestra')) {
+        const almacenMuestra = db.createObjectStore('Muestra', { 
+            keyPath: ['InformanteId', 'VariedadId', 'Semana'] 
+            });
+        almacenMuestra.createIndex('BuscarxInformante', 'InformanteId', { unique: false }); 
+        // almacenMuestra.createIndex('BuscarDian', 'DiaSemanaId', { unique: false }); 
+        // almacenMuestra.createIndex('BuscarSemana', 'Semana', { unique: false }); 
+       
+        // Nuevo índice compuesto para buscar por InformanteId y Semana combinados
+        almacenMuestra.createIndex('BuscarxInformanteYSemana', ['InformanteId', 'Semana'], { unique: false });
+    }
 
-  // Crear el objeto de almacenamiento para 'SeriePrecio'
-  if (!db.objectStoreNames.contains('SeriesPrecios')) {
-    const almacenSeriePrecio = db.createObjectStore('SeriesPrecios', { 
-        keyPath: ['InformanteId', 'VariedadId', 'Fecha'] 
-         });
-     almacenSeriePrecio.createIndex('BuscarPorInformanteYVariedad', ['InformanteId', 'VariedadId'], { unique: false });
-  }
+    // Crear el objeto de almacenamiento para 'SeriePrecio'
+    if (!db.objectStoreNames.contains('SeriesPrecios')) {
+        const almacenSeriePrecio = db.createObjectStore('SeriesPrecios', { 
+            keyPath: ['InformanteId', 'VariedadId', 'Fecha'] 
+            });
+        almacenSeriePrecio.createIndex('BuscarPorInformanteYVariedad', ['InformanteId', 'VariedadId'], { unique: false });
+        almacenSeriePrecio.createIndex('BuscarPorInformanteYFecha', ['InformanteId', 'Fecha'], { unique: false });
+        almacenSeriePrecio.createIndex('BuscarPorFechaCreacion', 'FechaCreacion');
+    }
 
   // Crear el objeto de almacenamiento para 'Variedades'
 //   if (!db.objectStoreNames.contains('Variedades')) {
@@ -89,24 +94,32 @@ function CrearAlmacen(evento) {
         almacenVariedades.createIndex('BuscarInformante', 'informanteId', { unique: false });
     }
 
-  // Crear el objeto de almacenamiento para 'Informantes'
-  if (!db.objectStoreNames.contains('Informantes')) {
-    const almacenEditorial = db.createObjectStore('Informantes', { keyPath: 'CodInformante' });
-    almacenEditorial.createIndex('BuscarInformante', 'CodInformante', { unique: false }); // Índice para editorial
-  }
+    // Crear el objeto de almacenamiento para 'Informantes'
+    if (!db.objectStoreNames.contains('Informantes')) {
+        const almacenEditorial = db.createObjectStore('Informantes',  { keyPath: ['CodInformante', 'Semana']} );
+        almacenEditorial.createIndex('BuscarInformante', 'CodInformante', { unique: false }); // Índice para editorial { keyPath: 'CodInformante' }
+    }
 
-  // Crear el objeto de almacenamiento para 'Informantes'
-  if (!db.objectStoreNames.contains('DiasSemana')) {
-    const almacenEditorial = db.createObjectStore('DiasSemana', { keyPath: 'iDdia' });
-    almacenEditorial.createIndex('BuscarDia', 'iDdia', { unique: false }); // Índice para editorial
-  }
+    // Crear el objeto de almacenamiento para 'Informantes'
+    if (!db.objectStoreNames.contains('DiasSemana')) {
+        const almacenEditorial = db.createObjectStore('DiasSemana', { keyPath: 'iDdia' });
+        almacenEditorial.createIndex('BuscarDia', 'iDdia', { unique: false }); // Índice para editorial
+    }
 
     if (!db.objectStoreNames.contains('UmedP')) {
         const almacenUmedp = db.createObjectStore('UmedP', { 
             keyPath: ['codproducto', 'urecol'] // ✅ Clave compuesta
         });
         almacenUmedp.createIndex('Buscarurecol', 'urecol', { unique: false });
-    }    
+    }   
+    
+    if (!db.objectStoreNames.contains('InformanteDetalle')) {
+        const almacenInformanteDetalle = db.createObjectStore('InformanteDetalle', { 
+            keyPath: ['CodInformante', 'Semana'] // ✅ Clave compuesta
+            //idUnico: `${variedad.id}-${variedad.informanteId.trim()}`,
+            //keyPath: 'idUnico'
+        });
+    }
 }
 
 async function validarLogin(usuarioId, password) {
@@ -143,7 +156,7 @@ async function validarLogin(usuarioId, password) {
 }
 
 async function obtenerAlmacenarUsuarios(empleado) {
-    try {
+    try {  //https://appcepov.inide.gob.ni https://localhost:7062 
         const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/Connecter/${empleado}`, {        
             method: 'POST',
             headers: {
@@ -152,8 +165,8 @@ async function obtenerAlmacenarUsuarios(empleado) {
             mode: 'cors'
         });
 
-         if (!response.ok) {
-            // Capturar el mensaje de error del cuerpo de la respuesta
+         // Verificar si la respuesta es exitosa
+        if (!response.ok) {
             const errorResponse = await response.json();
             const errorMessage = errorResponse.mensaje || `Error en la solicitud HTTP: ${response.status}`;
             throw new Error(errorMessage);
@@ -161,21 +174,21 @@ async function obtenerAlmacenarUsuarios(empleado) {
 
         const user = await response.json();
         console.log('Usuarios Obtenidos:', user);
-
+       
+        // Verificar que la respuesta sea un array
+        if (!user?.usuario) {
+            throw new Error('Formato de Respuesta No Válido');
+        }
         // if (!Array.isArray(users)) {
         //     throw new Error('Formato de Respuesta No Válido');
         // }
-        // Verificar que la respuesta tenga el formato esperado
-        //if (!user || !user.idEmpleado) {
-        if (!user?.idEmpleado) {
-            throw new Error('Formato de Respuesta No Válido');
-        }
 
+        // Inicializar la base de datos
         const db = await IniciarBaseDatos();
         const tx = db.transaction('Users', 'readwrite');
         const store = tx.objectStore('Users');
 
-        // Eliminar usuarios existentes excepto admin
+        // Eliminar usuarios existentes excepto admin y Autoriza
         const existingUsers = await new Promise((resolve, reject) => {
             const request = store.getAllKeys();
             request.onsuccess = () => resolve(request.result);
@@ -183,25 +196,87 @@ async function obtenerAlmacenarUsuarios(empleado) {
         });
 
         for (const key of existingUsers) {
-            if (key !== 'admin') {
+            if (key !== 'admin' && key !== 'Autoriza') {
                 await store.delete(key);
             }
         }
 
         // Almacenar nuevos usuarios
-        // for (const user of users) {
-        //     if (user.usuarioId && user.password) {
-        //         await store.put({
-        //             UsuarioId: user.usuarioId,
-        //             password: user.password
-        //         });
-        //     }
-        // }
-        // Almacenar el nuevo usuario
         await store.put({
-            UsuarioId: user.idEmpleado,
-            password: "clave" // Puedes cambiar la clave según sea necesario
+            UsuarioId: user.usuario,
+            password: user.pass // Puedes cambiar la clave según sea necesario
         });
+        
+        await tx.done; // Asegúrate de que la transacción se complete
+        return { success: true, message: 'Usuarios importados y almacenados correctamente.' };
+    } catch (error) {
+        console.error('Error al Obtener y Almacenar Usuarios:', error);
+        return { success: false, message: error.message };
+    }
+}
+
+async function obtenerPermisoAlmacenar2(empleado, usuario, clave) {
+    try {
+        // Construir la URL base
+        let url = `https://appcepov.inide.gob.ni/endpoint/cipc/Einkommen/${empleado}/${usuario}`;
+
+        // Agregar clave a la URL si está presente
+        if (clave) {
+            url += `?clave=${encodeURIComponent(clave)}`;
+        }
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json'
+            },
+            mode: 'cors'
+        });
+
+        // Verificar si la respuesta es exitosa
+        if (!response.ok) {
+            const errorResponse = await response.json();
+            const errorMessage = errorResponse.mensaje || `Error en la solicitud HTTP: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+
+        const users = await response.json();
+        console.log('Usuarios Obtenidos:', users);
+       
+        // Verificar que la respuesta sea un array
+        if (!Array.isArray(users)) {
+            throw new Error('Formato de Respuesta No Válido');
+        }
+
+        // Inicializar la base de datos
+        const db = await IniciarBaseDatos();
+        const tx = db.transaction('Users', 'readwrite');
+        const store = tx.objectStore('Users');
+
+        // Eliminar usuarios existentes excepto admin y Autoriza
+        const existingUsers = await new Promise((resolve, reject) => {
+            const request = store.getAllKeys();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+
+        for (const key of existingUsers) {
+            if (key !== 'admin' && key !== 'Autoriza') {
+                await store.delete(key);
+            }
+        }
+
+        // Almacenar nuevos usuarios
+        for (const user of users) {
+            if (user.usuario && user.pass) {
+                await store.put({
+                    UsuarioId: user.usuario,
+                    password: user.pass
+                });
+            } else {
+                console.warn('Usuario o contraseña faltante en el objeto:', user);
+            }
+        }
 
         await tx.done; // Asegúrate de que la transacción se complete
         return { success: true, message: 'Usuarios importados y almacenados correctamente.' };
@@ -239,7 +314,7 @@ async function obtenerPermisoAlmacenar(empleado, usuario, clave) {
         const user = await response.json();
         console.log('Usuarios Obtenidos:', user);
        
-        if (!user?.idEmpleado) {
+        if (!user?.usuario) {
             throw new Error('Formato de Respuesta No Válido');
         }
 
@@ -255,15 +330,15 @@ async function obtenerPermisoAlmacenar(empleado, usuario, clave) {
         });
 
         for (const key of existingUsers) {
-            if (key !== 'admin' && key !== 'Connecter') {
+            if (key !== 'admin' && key !== 'Autoriza') {
                 await store.delete(key);
             }
         }
 
         // Almacenar el nuevo usuario
         await store.put({
-            UsuarioId: user.idEmpleado,
-            password: "9175e455384b20a983ddab1408e35e3f3789b794" // Puedes cambiar la clave según sea necesario
+             UsuarioId: user.usuario,
+            password: user.pass
         });
 
         await tx.done; // Asegúrate de que la transacción se complete
@@ -290,8 +365,9 @@ async function obtenerAlmacenarCatalogos(empleado) {
         }
 
         const catalog = await response.json();
+        console.error(catalog)
 
-        if (!catalog || !Array.isArray(catalog.informantes) || !Array.isArray(catalog.variedades) || !Array.isArray(catalog.diasSemana) || !Array.isArray(catalog.umedP) || !Array.isArray(catalog.semana)) {
+        if (!catalog || !Array.isArray(catalog.informantes) || !Array.isArray(catalog.variedades) || !Array.isArray(catalog.diasSemana) || !Array.isArray(catalog.umedP) || !Array.isArray(catalog.semana) || !Array.isArray(catalog.informanteDto)) {
             throw new Error('Formato de respuesta inválido');
         }
 
@@ -305,7 +381,8 @@ async function obtenerAlmacenarCatalogos(empleado) {
         for (const informante of catalog.informantes) {
             await informantesStore.put({
                 CodInformante: informante.codInformante.trim(),
-                NombreInformante: informante.nombreInformante.trim()
+                NombreInformante: informante.nombreInformante.trim(),
+                Semana: Number.parseInt(informante.semana)
             });
         }
         await txInformantes.done;
@@ -360,6 +437,22 @@ async function obtenerAlmacenarCatalogos(empleado) {
         }
         await txSemana.done;
 
+        // Insertar InformanteDetalle
+        const txInformantesDetalle = db.transaction('InformanteDetalle', 'readwrite');
+        const informantesDetalleStore = txInformantesDetalle.objectStore('InformanteDetalle');
+        
+        for (const informante of catalog.informanteDto) {
+            await informantesDetalleStore.put({
+                CodInformante: informante.codInformante.trim(),
+                Semana: Number.parseInt(informante.semana),
+                Direccion: informante.direccion.trim(),
+                Region: informante.nomRegionDistrito.trim(),
+                Cantidad: Number.parseInt(informante.conteoProductos),
+            });
+        }
+        await txInformantesDetalle.done;
+
+
         return { 
             success: true, 
             message: `Datos almacenados: ${catalog.informantes.length} informantes , ${catalog.variedades.length} variedades , ${catalog.diasSemana.length} dias ,  ${catalog.umedP.length} unidad medida y ${catalog.semana.length} semanas`
@@ -376,7 +469,7 @@ async function obtenerAlmacenarCatalogos(empleado) {
 
 async function obtenerAlmacenarMuestra(empleado) {
     try {
-        // Obtener datos desde la API
+        // Obtener datos desde la API https://appcepov.inide.gob.ni https://localhost:7062
         const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/MuestraLinq/${empleado}`, {
             method: 'GET',
             headers: {

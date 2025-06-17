@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>DB</title>
+    <title>IPC</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <link rel="preconnect" href="https://fonts.googleapis.com ">
     <link rel="preconnect" href="https://fonts.gstatic.com " crossorigin>
@@ -64,6 +64,24 @@
         </div>
     </div>
 
+    <!-- Modal de confirmacion -->
+    <div id="modalConfirmacionReinicio" class="modal fade" tabindex="-1" aria-labelledby="exampleModalLabel">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLabelReinicio">Confirmación</h5>
+                </div>
+                <div class="modal-body">
+                    ¿Estás seguro de que deseas Reiniciar la base de datos, se perderan los registros no exportados?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="btnCancelarReinicio">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnReiniciar">Reiniciar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">IPC</a>
@@ -95,17 +113,17 @@
     <script src="Controller/BaseDatos.js"></script>
 
     <script> 
-        const usuarioStr = localStorage.getItem('usuarioId');
+        const usuarioStr = localStorage.getItem('Benutzer');
         if (!usuarioStr) {
             document.getElementById("mensajeModal").textContent = "Debes iniciar sesión para acceder a esta página.";
             new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
-            setTimeout(() => window.location.href = "login.html", 2000);
+            setTimeout(() => window.location.href = "acceso.html", 2000);
         } else {
-            if (usuarioStr !== 'admin' && usuarioStr !== 'Connecter') {
+            if (usuarioStr !== 'admin' && usuarioStr !== 'Autoriza') {
                 // Si el usuario no es admin o Connecter, mostrar mensaje de acceso denegado
                 document.getElementById("mensajeModal").textContent = "No tienes permisos para acceder a esta página.";
                 new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
-                setTimeout(() => window.location.href = "login.html", 2000);
+                setTimeout(() => window.location.href = "acceso.html", 2000);
             }
         }
 
@@ -123,11 +141,13 @@
                     cargavistas.innerHTML = data; 
 
                     if (view === 'MantCat.html') {
-                        const usuarioStrs = localStorage.getItem('usuarioId');
-                        if (usuarioStrs === 'Connecter') {
+                        const usuarioStrs = localStorage.getItem('Benutzer');
+                        if (usuarioStrs === 'Autoriza') {
                             // Habilitar botones de importar
-                            document.getElementById('btnUsuario').style.display = 'none';
+                            document.getElementById('pass').style.display = 'inline-block';                            
                             document.getElementById('btnAutorizar').style.display = 'inline-block';
+                            document.getElementById('btnUsuario').style.display = 'none';
+                           
                         } 
                     } 
                 })
@@ -150,9 +170,7 @@
                 if (result.success) {
                     mostrarMensaje(`${result.message}`, "success");
                     $("#btnCatalogos").prop("disabled", false);
-                    $("#btnMuestra").prop("disabled", false);
-                    $("#btnReiniciar").prop("disabled", false);
-                    $("#btlEliminaBase").prop("disabled", false);
+                    $("#btnMuestra").prop("disabled", false);                    
                 } else {
                     mostrarMensaje(`Error al importar usuarios: ${result.message}`, "error");                    
                 }
@@ -162,15 +180,20 @@
         }
 
         async function AutorizarFueraPeriodo() {
-            const usuarioStr = localStorage.getItem('usuarioId');
-            const claveStr = localStorage.getItem('clave');
+            const usuarioStr = localStorage.getItem('Benutzer');
+            let claveStr = document.getElementById('pass').value;          
             const Empleado = document.querySelector('#empleado').value.toUpperCase();
 
             // Validar al menos un empleado seleccionado
-            if (!Empleado) {
+            if (!Empleado || !claveStr) {
                 mostrarMensaje("Por favor, digite código de empleado.", "error");
                 return;
             }
+
+            // CODIFICAR LA CONTRASEÑA EN BASE64
+            claveStr = Base64.encode(claveStr);
+            // HASHEAR LA CONTRASEÑA USANDO SHA-1
+            claveStr = await hashPassword(claveStr);            
 
             try {
                 const result = await obtenerPermisoAlmacenar(Empleado, usuarioStr, claveStr);
@@ -178,8 +201,14 @@
                     mostrarMensaje(`${result.message}`, "success");
                     $("#btnCatalogos").prop("disabled", false);
                     $("#btnMuestra").prop("disabled", false);
-                    $("#btnReiniciar").prop("disabled", false);
-                    $("#btlEliminaBase").prop("disabled", false);
+
+                    // Obtener el día actual
+                    const today = new Date();
+                    const day = today.getDate();
+                    // Habilitar botones solo si el día es 1 o 15
+                    if (day === 1 || day === 15) {
+                        $("#btlEliminaBase").prop("disabled", false);
+                    }
                 } else {
                     mostrarMensaje(`Error al importar usuarios: ${result.message}`, "error");                    
                 }
@@ -231,18 +260,30 @@
         }
 
         async function LimpiarBase() {
-            try {
-                const result = await deleteStore();
-                if (result.success) {
-                    mostrarMensaje(`Se limpio base de datos. ${result.message}`, "success");                   
-                    const db = await IniciarBaseDatos(); // Tu función existente
-                    console.log("Base de datos reiniciada");
-                } else {
-                    mostrarMensaje(`Error al limpiar base de datos: ${result.message}`, "error");
+            new bootstrap.Modal(document.getElementById("modalConfirmacionReinicio")).show();
+
+            $('#btnCancelarReinicio').off('click').on('click', function() { 
+                $('#modalConfirmacionReinicio').modal('hide');
+             })
+
+             // Agregar evento al botón de eliminar
+            $('#btnReiniciar').off('click').on('click', async function() {
+                try {
+                    const result = await deleteStore();
+                    if (result.success) {
+                        mostrarMensaje(`Se limpio base de datos. ${result.message}`, "success");                   
+                        const db = await IniciarBaseDatos(); // Tu función existente
+                        console.log("Base de datos reiniciada");
+                    } else {
+                        mostrarMensaje(`Error al limpiar base de datos: ${result.message}`, "error");
+                    }
+                } catch (error) {
+                    mostrarMensaje(`Error inesperado: ${error.message}`, "error");
+                } finally {
+                    // Ocultar el modal de confirmación
+                    $('#modalConfirmacionReinicio').modal('hide');
                 }
-            } catch (error) {
-                mostrarMensaje(`Error inesperado: ${error.message}`, "error");
-            }
+            });
         }
 
         async function EliminarBase() {
@@ -310,10 +351,9 @@
         }
     
         function cerrarSesion() {
-            localStorage.removeItem('usuarioId'); // Elimina el usuario de localStorage
-            localStorage.removeItem('clave'); 
-            //? document.cookie = "usuarioId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-            window.location.href = "login.html";
+            localStorage.removeItem('Benutzer'); // Elimina el usuario de localStorage
+            //? document.cookie = "Benutzer=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            window.location.href = "acceso.html";
         }
     
         $(document).ready(function() {
@@ -322,6 +362,128 @@
                 $(this).addClass('active').siblings().removeClass('active');
             });
         });
+    </script>
+    <script>
+        var Base64 = {
+            // private property
+            _keyStr: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+    
+            // public method for encoding
+            encode: function (input) {
+                var output = "";
+                var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+                var i = 0;
+    
+                input = Base64._utf8_encode(input);
+    
+                while (i < input.length) {
+                    chr1 = input.charCodeAt(i++);
+                    chr2 = input.charCodeAt(i++);
+                    chr3 = input.charCodeAt(i++);
+    
+                    enc1 = chr1 >> 2;
+                    enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+                    enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+                    enc4 = chr3 & 63;
+    
+                    if (isNaN(chr2)) {
+                        enc3 = enc4 = 64;
+                    } else if (isNaN(chr3)) {
+                        enc4 = 64;
+                    }
+    
+                    output = output +
+                        this._keyStr.charAt(enc1) + this._keyStr.charAt(enc2) +
+                        this._keyStr.charAt(enc3) + this._keyStr.charAt(enc4);
+                }
+    
+                return output;
+            },
+    
+            // public method for decoding
+            decode: function (input) {
+                var output = "";
+                var chr1, chr2, chr3;
+                var enc1, enc2, enc3, enc4;
+                var i = 0;
+    
+                input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+    
+                while (i < input.length) {
+                    enc1 = this._keyStr.indexOf(input.charAt(i++));
+                    enc2 = this._keyStr.indexOf(input.charAt(i++));
+                    enc3 = this._keyStr.indexOf(input.charAt(i++));
+                    enc4 = this._keyStr.indexOf(input.charAt(i++));
+    
+                    chr1 = (enc1 << 2) | (enc2 >> 4);
+                    chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+                    chr3 = ((enc3 & 3) << 6) | enc4;
+    
+                    output = output + String.fromCharCode(chr1);
+    
+                    if (enc3 != 64) {
+                        output = output + String.fromCharCode(chr2);
+                    }
+                    if (enc4 != 64) {
+                        output = output + String.fromCharCode(chr3);
+                    }
+                }
+    
+                output = Base64._utf8_decode(output);
+    
+                return output;
+            },
+    
+            // private method for UTF-8 encoding
+            _utf8_encode: function (string) {
+                string = string.replace(/\r\n/g, "\n");
+                var utftext = "";
+    
+                for (var n = 0; n < string.length; n++) {
+                    var c = string.charCodeAt(n);
+    
+                    if (c < 128) {
+                        utftext += String.fromCharCode(c);
+                    } else if ((c > 127) && (c < 2048)) {
+                        utftext += String.fromCharCode((c >> 6) | 192);
+                        utftext += String.fromCharCode((c & 63) | 128);
+                    } else {
+                        utftext += String.fromCharCode((c >> 12) | 224);
+                        utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+                        utftext += String.fromCharCode((c & 63) | 128);
+                    }
+                }
+    
+                return utftext;
+            },
+    
+            // private method for UTF-8 decoding
+            _utf8_decode: function (utftext) {
+                var string = "";
+                var i = 0;
+                var c = c1 = c2 = 0;
+    
+                while (i < utftext.length) {
+                    c = utftext.charCodeAt(i);
+    
+                    if (c < 128) {
+                        string += String.fromCharCode(c);
+                        i++;
+                    } else if ((c > 191) && (c < 224)) {
+                        c2 = utftext.charCodeAt(i + 1);
+                        string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+                        i += 2;
+                    } else {
+                        c2 = utftext.charCodeAt(i + 1);
+                        c3 = utftext.charCodeAt(i + 2);
+                        string += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+                        i += 3;
+                    }
+                }
+    
+                return string;
+            }
+        };
     </script>
 </body>
 </html>

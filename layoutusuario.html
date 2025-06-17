@@ -14,6 +14,9 @@
     <link rel="stylesheet" href="Content/bootstrap-float-label.css">
     <link rel="stylesheet" href="Content/select2.min.css">
     <link rel="stylesheet" href="Content/bootstrap-icons.css">
+    <link rel="stylesheet" href="Content/alertify/alertify.min.css">
+    <link rel="stylesheet" href="Content/alertify/default.min.css">
+    <link rel="stylesheet" href="Content/alertify/semantic.min.css">
     <style>
         @media (max-width: 768px) {
         .container {
@@ -23,6 +26,28 @@
         #message {
             text-align: center;
         }
+
+        /* Estilo para los elementos de la lista en la barra de navegación */
+        .navbar-nav .nav-item .nav-link {
+            background-color: #0d6efd; /* Cambia el fondo a azul */
+            color: white; /* Cambia el color del texto a blanco */
+        }
+
+        /* Estilo para el dropdown */
+        .dropdown-menu {
+            background-color: #0d6efd; /* Cambia el fondo del menú desplegable a azul */
+        }
+
+        .dropdown-item {
+            color: white; /* Cambia el color del texto de los elementos del dropdown a blanco */
+        }
+
+        /* Cambia el color del texto al pasar el mouse sobre los elementos del dropdown */
+        .dropdown-item:hover {
+            background-color: #0a58ca; /* Cambia el fondo al pasar el mouse */
+            color: white; /* Asegúrate de que el texto siga siendo blanco */
+        }
+
     </style>
 
     <!-- Fuentes -->
@@ -33,6 +58,7 @@
     <script src="Scripts/jquery-3.5.1.min.js"></script>
     <script src="Scripts/select2.min.js"></script>
     <script src="Scripts/jquery.inputmask.bundle.js"></script>
+    <script src="Scripts/alertify.min.js"></script>
 </head>
 
 <body>
@@ -60,14 +86,22 @@
             <div class="collapse navbar-collapse" id="menuUsuario">
                 <div class="navbar-nav">
                     <ul class="navbar-nav ms-auto">
-                        <li class="nav-item"><a class="nav-link" href="#" onclick="loadView('ListarMuestra.html')">Muestra</a></li>
-                        <li class="nav-item"><a class="nav-link" href="#" onclick="loadView('ExportarMuestra.html')">Exportar</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#" onclick="loadView('ListarMuestra.html'); collapseMenu()">Muestra</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#" onclick="loadView('ExportarMuestra.html'); collapseMenu()">Exportar</a></li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="pendientesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Pendientes</a>
+                            <ul class="dropdown-menu" aria-labelledby="pendientesDropdown">
+                                <li><a class="dropdown-item" href="#" onclick="loadView('ListaInformantePendientes.html'); collapseMenu()">Informantes</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="loadView('ListaPesablePendiente.html'); collapseMenu()">Pesables</a></li>
+                            </ul>
+                        </li>
                         <li class="nav-item"><a class="nav-link" href="#" onclick="cerrarSesion()">Salir</a></li>
                     </ul>
                 </div>
             </div>
         </div>
     </nav>
+
 
     <!-- Contenedor principal -->
     <main class="container py-4">
@@ -87,22 +121,31 @@
     <script src="Controller/Muestra.js"></script>
 
     <script>   
-         //const usuariocookie = getCookie('usuarioId');
-        const usuarioStr = localStorage.getItem('usuarioId');
+         // Función para colapsar el menú
+        function collapseMenu() {
+            const menu = document.getElementById('menuUsuario');
+            const collapse = new bootstrap.Collapse(menu, {
+                toggle: true
+            });
+        }
+        
+         //const usuariocookie = getCookie('Benutzer');
+        const usuarioStr = localStorage.getItem('Benutzer'); 
         if (!usuarioStr) {
             document.getElementById("mensajeModal").textContent = "Debes iniciar sesión para acceder a esta página.";
             new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
-            setTimeout(() => window.location.href = "login.html", 2000);
+            setTimeout(() => window.location.href = "acceso.html", 2000);
         } else {
-            if (usuarioStr === 'admin') {
+            if (usuarioStr === 'admin' || usuarioStr === 'Autoriza') {
+                console.error("entre")
                 document.getElementById("mensajeModal").textContent = "No tienes permisos para acceder a esta página.";
                 new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
-                setTimeout(() => window.location.href = "login.html", 2000);
+                setTimeout(() => window.location.href = "acceso.html", 2000);
             }
         }
 
         // Función para cargar vistas
-        function loadView(view) {
+        function loadView(view, callback) {
             const cargavistas = document.getElementById('cargavistas');
             fetch(view)
                 .then(response => {
@@ -117,162 +160,7 @@
                     if (view === 'ListarMuestra.html') {                        
                         setCurrentDateTime(); // Llamar a la función para establecer la fecha y hora actual
                         initListarCombos(); // llamar la funcion para cargar select iniciales
-
-                        // Manejador de evento para el botón de filtrar
-                        document.getElementById('filtrarBtn').addEventListener('click', () => {
-                            document.getElementById('variedadDetalle').style.display = 'block';
-                        });                        
-
-                        document.getElementById('limpiarBtn').addEventListener('click', () => {
-                            limpiarVariedadDetalle("nuevo"); //? limpiarVariedadDetalle();
-                        });
-
-                        document.getElementById('guardarBtn').addEventListener('click', () => {
-                            insertarSeriePrecio()
-                            .then(resultado => {
-                                if (!resultado.success) {
-                                    mostrarMensaje(`Error: ${resultado.message}`, 'error');
-                                } 
-                                else {
-                                    // Limpiar formulario después de guardar
-                                    limpiarVariedadDetalle("nuevo");
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error:', error.message);
-                            });
-                        });
-                        
-                        document.getElementById('btnfiltrarIngresadas').addEventListener('click', () => {
-                            const informanteId = $('#informantesSelect').val();
-                            mostrarDiferencias(informanteId);
-                        });
-                        
-                        $('#diasSelect').on('select2:select',  function (e) { 
-                            filterAndPopulateInformantes();
-                        });
-
-                        $('#informantesSelect').on('select2:select', async function (e) {
-                            const informanteId = $(this).val();
-                            const variedadDetalle = document.getElementById('variedadDetalle'); 
-                            try {
-                                //? await compararRegistros(informanteId);    
-                                mostrarDiferencias(informanteId);                            
-                                $('#resultadoSelect').select2("val", "ca");
-                                $("#filtrarBtn").prop("disabled", false);
-                                variedadDetalle.style.display = 'none';
-                                limpiarVariedadDetalle("nuevo");
-
-                                //? const cant = await actualizarCantidad(informanteId);
-                                //? $("#cpproducto").val(cant);
-                            } catch (error) {
-                                console.log('Error al comparar registros:', error);
-                                mostrarMensaje('No se puedo recuperar numerador.', "error");
-                            }
-                           
-
-                            //? actualizarCantidad(informanteId).then(cant => {
-                            //    $("#cpproducto").val(cant);
-                            //}).catch(error => {
-                            //    mostrarMensaje('No se puedo recuperar numerador.', "error");
-                            //});
-                        });
-                        
-                        // ✅ Alternativa usando evento de Select2
-                        $('#resultadoSelect').on('select2:select', function (e) {                              
-                            const estadoId = $(this).val();
-                            if (estadoId==1) {
-                                const informanteId = $("#informantesSelect").val().trim();
-                                const variedadesSelect = document.getElementById('variedadesSelect');  
-                                
-                                // Habilitar el select
-                                variedadesSelect.disabled = false;
-
-                                // Limpiar el contenido del select
-                                $(variedadesSelect).empty(); // Usar .empty() para limpiar el contenido
-                                
-                                // Mostrar mensaje de carga
-                                variedadesSelect.innerHTML = '<option value="">Cargando variedades...</option>';
-
-                                // Cargar variedades filtradas por informanteId
-                                cargarSelect('Variedades', variedadesSelect, 'id', 'Descripcion', 'id', 'informanteId', informanteId);
-                                                                        
-                                // Si no hay variedades
-                                if (variedadesSelect.options.length < 1) {
-                                    variedadesSelect.disabled = true;
-                                    variedadesSelect.innerHTML = '<option value="">No hay variedades para este informante</option>';
-                                }
-                            } else {
-                                $("#filtrarBtn").prop("disabled", true);
-                                InsertarRegistroNoRealizado();
-                            }                            
-                        });
-
-                        $('#variedadesSelect').on('select2:select', async function (e) { 
-                            const informanteId = document.getElementById('informantesSelect').value;                            
-                            const variedadId = $(this).val();
-                            const undmSelect = document.getElementById('undmSelect');  
-
-                            // Validar al menos un filtro seleccionado
-                            if (!informanteId || !variedadId) {
-                                mostrarMensaje('Por favor seleccione ambos criterios de filtrado: Informante y Variedad.', "error");
-                                return;
-                            }                            
-                            
-                            // Llamar a la función para filtrar muestras
-                            filtrarMuestras(informanteId, variedadId);
-
-                            undmSelect.disabled = false;                          
-                        
-                            undmSelect.innerHTML = '<option value="">Cargando unidades...</option>';
-                            // Cargar variedades filtradas por informanteId
-                            await cargarSelect('UmedP', undmSelect, 'urecol', 'urecol', 'urecol', 'codproducto', variedadId);
-                                                            
-                            // Si no hay variedades
-                            if (undmSelect.options.length < 1) {
-                                undmSelect.disabled = true;
-                                undmSelect.innerHTML = '<option value="">No hay unidades para esta variedad</option>';
-                            } else {
-                                // Cargar serie de precios
-                                await  cargarSeriePrecio(informanteId, variedadId);
-                            }  
-                        });
-
-                        $('#estadoSelect').on('select2:select', function (e) {                            
-                            const estadoId = $(this).val();
-                            const vecesn = Number.parseInt(sMuestra.Nveces) + 1;
-                            $("#cantidadInput").val(1);                            
-                            $("#undmSelect").val(sMuestra.UnidadMedidaId).trigger("change");
-                            if (estadoId < 4) { 
-                                $("#undmSelect").prop("disabled", true);
-                                $("#cantidadInput").prop("disabled", true);
-                                $("#precioInput").val(0)
-                                $("#precioInput").prop("disabled", true);
-                                $('#pesoInput').prop("disabled", true);
-                                if (estadoId== 2) {
-                                    $('#preciosustituidoInput').prop("disabled", false);  
-                                } else { $('#preciosustituidoInput').prop("disabled", true); }                                
-                                $("#nvecesInput").val(vecesn);
-                                $(".schk").prop("disabled", true);                        
-                            }  else {
-                                $("#undmSelect").prop("disabled", false); 
-                                $("#cantidadInput").prop("disabled", false);
-                                $("#precioInput").val(0);  
-                                $("#precioInput").prop("disabled", false);                              
-                                if ($("#espesable").val() == "true") {
-                                     $('#pesoInput').prop("disabled", false);  
-                                } else { $('#pesoInput').prop("disabled", true); }  
-                                $('#preciosustituidoInput').val(0);
-                                $('#preciosustituidoInput').prop("disabled", true);  
-                                $(".schk").prop("disabled", false);
-                                //? $('#ofertano').prop('checked', true);  
-                                //? $('#descuentono').prop('checked', true);
-                                //? $('#ivano').prop('checked', true);
-                                //? $('#propinano').prop('checked', true);                       
-                            } 
-                            $("#tipomonedaSelect").val(1).trigger("change");  
-                            $("#analista").text(sMuestra.ObservacionAnalista);                                                                              
-                        });
+                        setupListarMuestraEventListeners(); // Configurar los event listeners para ListarMuestra
 
                         // 🔍 Inicializar Select2 después de cargar los datos                       
                         $('.sel').select2({
@@ -280,46 +168,24 @@
                             allowClear: true,
                             width: '100%'
                         });
-                       
+                        
                         $(".mask").inputmask('Regex', { regex: "^[0-9,]{1,12}(\\.\\d{1,2})?$" });
-
-                        $('#ofertachk').on('click', 'input[type=checkbox]', function () {
-                            $('#ofertachk input[type=checkbox]').prop("checked", false);
-                            $(this).prop("checked", true);
-                        });
-
-                        $('#descuentochk').on('click', 'input[type=checkbox]', function () {
-                            $('#descuentochk input[type=checkbox]').prop("checked", false);
-                            $(this).prop("checked", true);
-                            $(this).val() == "true" ? $("#porcentajedescuentoInput").prop("disabled", false) : $("#porcentajedescuentoInput").prop("disabled", true);
-                        });
-
-                        $('#ivachk').on('click', 'input[type=checkbox]', function () {
-                            $('#ivachk input[type=checkbox]').prop("checked", false);
-                            $(this).prop("checked", true);
-                        });
-
-                        $('#propinachk').on('click', 'input[type=checkbox]', function () {
-                            $('#propinachk input[type=checkbox]').prop("checked", false);
-                            $(this).prop("checked", true);
-                        });
                     }
                     
+                    // Ejecutar el callback si se proporciona
+                    if (typeof callback === 'function') {
+                        // Usamos setTimeout para asegurar que el DOM esté completamente renderizado
+                        setTimeout(() => {
+                            callback();
+                        }, 100); // Pequeño delay para asegurar que Select2 y demás estén listos
+                    }
                 })
                 .catch(error => {
                     console.error('There was a problem with the fetch operation:', error);
                 });
         }
 
-        // Inicializar la base de datos al cargar la página
-        window.addEventListener('load', function() {
-            const usuarioId = localStorage.getItem('usuarioId');
-            $("#hidden-usuarioId").val(usuarioId);
-            
-            IniciarBaseDatos();    
-            //? getLocation();
-
-            function getLocation() {
+        function getLocation() {
                 setTimeout(() => {
                     const options = {
                         enableHighAccuracy: true,
@@ -343,39 +209,81 @@
                 }, 2000); 
             };
 
-            function useLocation(position) {            
-                document.getElementById("lblLongitud").value = position.coords.longitude;
-                document.getElementById("lblLatitud").value = position.coords.latitude;
-            };
+        function useLocation(position) {            
+            document.getElementById("lblLongitud").value = position.coords.longitude;
+            document.getElementById("lblLatitud").value = position.coords.latitude;
+        };
 
-            // Función para manejar errores
-            function handleError(error) {
-                switch (error.code) {
-                    case error.PERMISSION_DENIED:
-                        console.error("El usuario ha denegado la solicitud de geolocalización.");
-                        alert("Por favor, permite el acceso a la ubicación.");
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        console.error("La información de ubicación no está disponible.");
-                        alert("No se pudo obtener la ubicación. Intenta de nuevo más tarde.");
-                        break;
-                    case error.TIMEOUT:
-                        console.error("La solicitud de geolocalización ha expirado.");
-                        alert("La solicitud de ubicación ha tardado demasiado. Intenta de nuevo.");
-                        break;
-                    case error.UNKNOWN_ERROR:
-                        console.error("Se ha producido un error desconocido.");
-                        alert("Se ha producido un error al intentar obtener la ubicación. Intenta de nuevo.");
-                        break;
-                }
+        // Función para manejar errores
+        function handleError(error) {
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    console.error("El usuario ha denegado la solicitud de geolocalización.");
+                    alert("Por favor, permite el acceso a la ubicación.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    console.error("La información de ubicación no está disponible.");
+                    alert("No se pudo obtener la ubicación. Intenta de nuevo más tarde.");
+                    break;
+                case error.TIMEOUT:
+                    console.error("La solicitud de geolocalización ha expirado.");
+                    alert("La solicitud de ubicación ha tardado demasiado. Intenta de nuevo.");
+                    break;
+                case error.UNKNOWN_ERROR:
+                    console.error("Se ha producido un error desconocido.");
+                    alert("Se ha producido un error al intentar obtener la ubicación. Intenta de nuevo.");
+                    break;
             }
+        }
+
+        async function ValidarMuestra() {
+            const Empleado = document.querySelector('#empleado').value.toUpperCase();
+
+             // Validar al menos un empleado seleccionado
+            if (!Empleado) {
+                mostrarMensaje('Por favor digite codigo empleado.', "error"); 
+                return;
+            }
+
+            try {
+                const result = await obtenerValidaMuestra(Empleado);
+                if (result.success) {
+                    mostrarMensaje(`Validación de muestra exitosa. ${result.message}`, "success");
+                } else {
+                    mostrarMensaje(`Error al validar muestra: ${result.message}`, "error");
+                }
+            } catch (error) {
+                mostrarMensaje(`Error inesperado: ${error.message}`, "error");
+            }
+        }
+
+        async function ValidarPesable() {
+            try {
+                const result = await mostrarPesableFaltante();
+
+                if (result.success) {
+                mostrarMensaje(`Validación de pesables exitosa. ${result.message}`, "success");
+                } else {
+                mostrarMensaje(`Error al validar pesables: ${result.message}`, "error");
+                }
+
+            } catch (error) {
+                mostrarMensaje(`Error inesperado: ${error.message}`, "error");
+            }
+        }
+        
+        // Inicializar la base de datos al cargar la página
+        window.addEventListener('load', function() {
+            const usuarioId = localStorage.getItem('Benutzer');
+            $("#hidden-usuarioId").val(usuarioId);
+            
+            IniciarBaseDatos();
         });        
     
         function cerrarSesion() {
-            localStorage.removeItem('usuarioId'); // Elimina el usuario de localStorage
-            localStorage.removeItem('clave'); 
-            //? document.cookie = "usuarioId=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;";
-            window.location.href = "login.html";
+           localStorage.removeItem('Benutzer'); // Elimina el usuario de localStorage
+            //? document.cookie = "Benutzer=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            window.location.href = "acceso.html";
         }
     
          $(document).ready(function() {

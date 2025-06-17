@@ -1,107 +1,184 @@
-// sw.js - Service Worker
+// sw.js - Service Worker con manejo robusto de versión del cache
 
-const CACHE_NAME = 'v1-cache-pwa';
+// Función para obtener el nombre del cache basado en la versión
+function getCacheName(version) {
+    return `pwa-cache-${version}`;
+}
+
+// Definir versiones para control de caché
+const CACHE_VERSION = 'v1.0.0';
+const CACHE_STATIC_NAME = getCacheName(`static-${CACHE_VERSION}`);
+const CACHE_DYNAMIC_NAME = getCacheName(`dynamic-${CACHE_VERSION}`);
+const CACHE_INMUTABLE_NAME = getCacheName(`inmutable-${CACHE_VERSION}`);
+
+// Página offline para fallback
 const OFFLINE_PAGE = '/offline.html';
-const ASSETS_TO_CACHE = [
-    '/',    
-    '/login.html',
+
+// Recursos estáticos propios de la app
+const ASSETS_TO_CACHE_STATIC = [
+    '/',
+    'favicon.ico',
+    '/acceso.html',
     '/layoutadmin.html',
     '/layoutusuario.html',
     '/ExportarMuestra.html',
     '/ListarMuestra.html',
+    '/ListaInformantePendientes.html',
+    '/ListaPesablePendientes.html',
     '/MantCat.html',
     '/offline.html',
-    '/Content/bootstrap.min.css',
-    '/Content/bootstrap.minbootstrap-float-label.css',
-    '/Content/select2.min.css',
-    '/Content/bootstrap-icons.css', // Agregar el CSS de Bootstrap Icons
-    '/Content/fonts/bootstrap-icons.woff', // Agregar la fuente .woff
-    '/Content/fonts/bootstrap-icons.woff2', // Agregar la fuente .woff2
-    '/Controller/BaseDatos.js',
+    '/img/icon-192.png',
+    '/img/icon-512.png',
+    '/img/Inide.png',
+    '/screenshots/main.png',
+    '/screenshots/config.png',
+    '/screenshots/capture.png',
     '/Controller/Muestra.js',
+    '/Controller/BaseDatos.js',
+];
+
+const ASSETS_TO_CACHE_INMUTABLE = [
+    '/Content/bootstrap.min.css',
+    '/Content/bootstrap-float-label.css',
+    '/Content/select2.min.css',
+    '/Content/bootstrap-icons.css',
+    '/Content/fonts/bootstrap-icons.woff',
+    '/Content/fonts/bootstrap-icons.woff2',
+    '/Content/alertify/alertify.min.css',
+    '/Content/alertify/default.min.css',
+    '/Content/alertify/semantic.min.css',
     '/Scripts/bootstrap.bundle.min.js',
     '/Scripts/jquery-3.5.1.min.js',
     '/Scripts/jquery.inputmask.bundle.js',
     '/Scripts/select2.min.js',
-    '/img/icon-192.png',
-    '/img/icon-512.png'
+    '/Scripts/alertify.min.js',
 ];
 
-// Instalación del Service Worker
+// Instalación del Service Worker y caché de recursos
 self.addEventListener('install', event => {
-    console.log('[Service Worker] Installing...');
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => {
-                console.log('[Service Worker] Caching app shell');
-                return cache.addAll(ASSETS_TO_CACHE);
+    console.log(`[Service Worker] Installing and caching static and immutable assets: ${CACHE_STATIC_NAME}, ${CACHE_INMUTABLE_NAME}`);
+    
+    const cacheStatic = caches.open(CACHE_STATIC_NAME)
+        .then(cache => cache.addAll(ASSETS_TO_CACHE_STATIC));
+
+    const cacheInmutable = caches.open(CACHE_INMUTABLE_NAME)
+        .then(cache => cache.addAll(ASSETS_TO_CACHE_INMUTABLE));
+
+    // Esperar a que ambos caches se completen antes de activar el service worker
+    event.waitUntil(Promise.all([cacheStatic, cacheInmutable]));
+    self.skipWaiting(); // Forzar activación inmediata tras instalación
+});
+
+// Función que facilita la activación y limpieza de caches viejas comparadas con la versión actual
+function clearOldCaches(currentCacheNames) {
+    return caches.keys().then(cacheNames => {
+        return Promise.all(
+            cacheNames.map(cacheName => {
+                if (!currentCacheNames.includes(cacheName)) {
+                    console.log(`[Service Worker] Deleting old cache: ${cacheName}`);
+                    return caches.delete(cacheName);
+                }
+                return null;
             })
-    );
-});
+        );
+    });
+}
 
-// Activación del Service Worker
+// Activación y limpieza de caches antiguas
 self.addEventListener('activate', event => {
-    console.log('[Service Worker] Activating new service worker');
-    const cacheWhitelist = [CACHE_NAME];
+    console.log(`[Service Worker] Activating service worker and cleaning old caches...`);
+    const cacheWhitelist = [CACHE_STATIC_NAME, CACHE_DYNAMIC_NAME, CACHE_INMUTABLE_NAME];
     event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.map(cacheName => {
-                    if (!cacheWhitelist.includes(cacheName)) {
-                        console.log('[Service Worker] Deleting old cache:', cacheName);
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        })
+        clearOldCaches(cacheWhitelist).then(() => self.clients.claim())
     );
-    return self.clients.claim();
 });
 
-// Manejo de solicitudes con estrategia de Cache First + Network Fallback
+// Estrategia fetch: Cache First con fallback a red y actualización dinámica de caché
 self.addEventListener('fetch', event => {
-    // Solo interceptamos solicitudes GET
-    if (event.request.method !== 'GET') return;
+    //! if (event.request.method !== 'GET') return;
+     const url = new URL(event.request.url);
+    
+    // Helper para identificar solicitudes a la API externa
+    const isExternalAPI = () => {
+        return url.hostname === 'https://appcepov.inide.gob.ni' && 
+              url.pathname.includes('/cipc/'); // Detecta todas las rutas bajo /cipc/
+    };
 
+    // Estrategia para APIs externas: Network Only + No cacheo
+    if (isExternalAPI()) {
+        event.respondWith(
+            fetch(event.request)
+                .then(networkResponse => {
+                    // Validar respuesta exitosa
+                    if (!networkResponse.ok) {
+                        return networkResponse; // Dejar que el cliente maneje el error
+                    }
+                    return networkResponse;
+                })
+                .catch(error => {
+                    // Manejo de errores de red para APIs
+                    if (event.request.mode === 'navigate') {
+                        return caches.match(OFFLINE_PAGE);
+                    }
+                    return new Response(JSON.stringify({
+                        error: 'network-error',
+                        message: 'Error de conexión'
+                    }), {
+                        status: 503,
+                        headers: {'Content-Type': 'application/json'}
+                    });
+                })
+        );
+        return;
+    }
+
+    // Estrategia original para recursos locales: Cache First
     event.respondWith(
         caches.match(event.request)
             .then(cachedResponse => {
                 if (cachedResponse) {
+                    // Devuelve el recurso desde caché inmediatamente
                     return cachedResponse;
                 }
 
-                // Si no está en caché, intentar desde red
-                return fetch(event.request)
-                    .then(response => {
-                        // Si la respuesta es válida, guardarla en caché
-                        if (!response || response.status !== 200 || response.type === 'opaque') {
-                            return response;
+                // Si no está en caché, request a la red
+                return fetch(event.request).then(networkResponse => {
+                    // Validar respuesta
+                    if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'opaque') {
+                        // Si la respuesta no es válida, devolver la página offline
+                        if (event.request.mode === 'navigate') {
+                            return caches.match(OFFLINE_PAGE);
                         }
+                        return networkResponse;
+                    }
 
-                        const responseToCache = response.clone();
-                        caches.open(CACHE_NAME)
-                            .then(cache => {
-                                cache.put(event.request, responseToCache);
-                            });
-
-                        return response;
+                    // Guardar la respuesta en caché para futuras solicitudes
+                    const responseToCache = networkResponse.clone();
+                    caches.open(CACHE_DYNAMIC_NAME).then(cache => {
+                        cache.put(event.request, responseToCache);
                     });
-            })
-            .catch(() => {
-                // Si falla todo, mostrar página offline
-                return caches.match(OFFLINE_PAGE);
+
+                    return networkResponse;
+                }).catch(() => {
+                    // Si falla la red, devolver página offline para navegación
+                    if (event.request.mode === 'navigate') {
+                        return caches.match(OFFLINE_PAGE);
+                    }
+                    // Si no es una solicitud de navegación, no hacer nada
+                    return new Response('Network error occurred', { status: 408 });
+                });
             })
     );
 });
 
-self.addEventListener('updatefound', () => {
-    const installingWorker = registration.installing;
-    installingWorker.onstatechange = () => {
-        if (installingWorker.state === 'installed') {
-            if (navigator.serviceWorker.controller) {
-                console.log('Nueva versión disponible.');
-                // Mostrar notificación o recargar
-            }
-        }
-    };
+// Escuchar el evento 'message' para forzar la actualización
+self.addEventListener('message', event => {
+    // Verificar el origen del mensaje antes de actuar
+    if (event.origin && event.origin !== self.origin) {
+        console.warn('[Service Worker] Message origin not trusted:', event.origin);
+        return;
+    }
+    if (event.data && event.data.action === 'skipWaiting') {
+        self.skipWaiting(); // Forzar la activación del nuevo service worker
+    }
 });

@@ -7,30 +7,62 @@
     <title>IPC</title>
     <link rel="icon" href="img/icon-192.png" type="image/png">
     <link rel="stylesheet" href="Content/bootstrap.min.css">
+    <!-- <link rel="manifest" href="/manifest.json"> -->
     <script src="Controller/BaseDatos.js"></script>
     <style>
         body {
-            background-color: #f8f9fa; /* Color de fondo suave */
+            background-color: #0d6efd; /* Color de fondo suave */
         }
 
         #login-form {
             background-color: white; /* Fondo blanco para el formulario */
-            padding: 20px; /* Espaciado interno */
+            padding: 5px; /* Espaciado interno */
             border-radius: 8px; /* Bordes redondeados */
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Sombra suave */
+            margin-top: 10px; /* Espacio superior reducido */
         }
 
         .form-label {
             font-weight: bold; /* Negrita para las etiquetas */
             color:blue
         }
+
+        .table {
+            margin: 0; /* Eliminar márgenes de la tabla */
+        }
+
+        .table img {
+            max-width: 80%; /* Asegurar que la imagen no exceda el ancho de la celda */
+            height: auto; /* Mantener la proporción de la imagen */
+        }
+
+        .alert {
+            margin-top: 5px; /* Espacio entre el formulario y el mensaje de error */
+        }
+
+        #error-message {
+            margin-top: 5px; /* Espacio superior reducido para el mensaje de error */
+        }
     </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h4 class="text-center">INICIAR SESION</h4>
+    <div class="container mt-2">
+        <table class="table table-borderless text-center">
+            <tbody>
+                <tr>
+                <td style="width: 10%;"><img alt="Inide Logo" src="img/Inide.png"></td>
+            </tr>
+            <tr>
+                <td>
+                    <div style="text-align:center; color: #edf0f1;">
+                        <h4>INDICE DE PRECIOS AL CONSUMIDOR</h4>
+                    </div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
         <div id="error-message" class="alert alert-danger d-none" role="alert"></div>
-        <div class="container d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+        <div class="container d-flex justify-content-center align-items-center" style="min-height: 40vh;">
             <form id="login-form" class="w-100" style="max-width: 400px;">
                 <div class="mb-3">
                     <label for="usuarioId" class="form-label">Usuario</label>
@@ -44,7 +76,6 @@
             </form>
         </div>
     </div>
-
     <script>
         document.getElementById('login-form').addEventListener('submit', async function(event) {
             event.preventDefault(); // Evitar el envío del formulario
@@ -52,23 +83,23 @@
             const usuarioId = document.getElementById('usuarioId').value;
             let password = document.getElementById('password').value;
 
-            try {
-                 // CODIFICAR LA CONTRASEÑA EN BASE64
-                password = Base64.encode(password);
-                // HASHEAR LA CONTRASEÑA USANDO SHA-1
-                password = await hashPassword(password);
+            // CODIFICAR LA CONTRASEÑA EN BASE64
+            password = Base64.encode(password);
+            // HASHEAR LA CONTRASEÑA USANDO SHA-1
+            password = await hashPassword(password);   
 
+            try {
                 const isValid = await validarLogin(usuarioId, password.toUpperCase());
                 const errorMessageDiv = document.getElementById('error-message');
 
                 if (isValid) {
-                    localStorage.removeItem('usuarioId');
-                    localStorage.removeItem('clave');
-                    localStorage.setItem('usuarioId', usuarioId);
-                    localStorage.setItem('clave', password);
+                    localStorage.removeItem('Benutzer');
+                    localStorage.setItem('Benutzer', usuarioId);
+                    // Establecer la cookie con el usuarioId
+                    // document.cookie = `usuarioId=${usuarioId}; path=/; max-age=3600`; // La cookie expira en 1 hora
                     // Redirigir a la vista layout.html
-                    if (usuarioId == "admin" || "Connecter") { window.location.href = 'layoutadmin.html'; // Cambia esto a la ruta de tu vista
-                    } else { window.location.href = 'layoutusuario.html'; } // Cambia esto a la ruta de tu vista 
+                    if (usuarioId === "admin" || usuarioId === "Autoriza") { window.location.href = 'layoutadmin.html'; // Cambia esto a la ruta de tu vista
+                    } else { window.location.href = 'layoutusuario.html'; } // Cambia esto a la ruta de tu vista                    
                 } else {
                     // Mostrar mensaje de error
                     errorMessageDiv.textContent = 'Credenciales inválidas. Intenta de nuevo.';
@@ -82,6 +113,7 @@
 
         window.addEventListener('load',  async function() {
             await IniciarBaseDatos();
+            // ? if (document.cookie.split(';').some((item) => item.trim().startsWith('Benutzer='))) { deleteCookie('Benutzer'); }
         });  
     </script>
     <script>
@@ -206,5 +238,18 @@
             }
         };
     </script>
+    <!-- <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado con éxito:', registration);
+                    })
+                    .catch(error => {
+                        console.error('Error registrando Service Worker:', error);
+                    });
+            });
+        }
+    </script> -->
 </body>
 </html>

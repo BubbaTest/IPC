@@ -1,0 +1,30 @@
+<div class="container mt-xl-2 text-center">
+    <h5 >Informantes con Variedades Pesables</h5>
+
+  <div class="row  justify-content-center mt-1">
+    <div class="col-md-6 d-flex justify-content-center">
+      <button type="button" class="btn btn-success" id="btnValidar" data-tabcontinuar="data-tabcontinuar" onclick="ValidarPesable()">
+        <span>Validar</span>
+        <span class="fa fa-database"></span>
+      </button>
+    </div>
+   </div>
+</div>
+
+<!-- Modal para mostrar informantes con variedades pesables faltantes -->
+<div class="modal fade" id="modalFaltantes" tabindex="-1" aria-labelledby="modalFaltantesLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title" id="modalFaltantesLabel">Informante con Pesables Faltantes</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body" id="modalFaltantesBody">
+        <!-- Aquí se insertará la lista dinámicamente -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -93,14 +93,15 @@ async function filtrarMuestras(informanteId, variedadId) {
         request.onsuccess = (event) => {
             const cursor = event.target.result;
             if (cursor) {
-                const muestra = cursor.value;
-                
+                const muestra = cursor.value; 
+
                 // Aplicar filtros si se proporcionan valores
                 const coincideInformante = !informanteId || muestra.InformanteId === informanteId;
                 const coincideVariedad = !variedadId || muestra.VariedadId === variedadId;
                 if (coincideInformante && coincideVariedad) {
                     resultados.push(muestra);
-                    sMuestra = muestra;   
+                    sMuestra = muestra;  
+                    $("#analista").text(sMuestra.ObservacionAnalista);  
 
                     // Crear fila de tabla
                     const row = document.createElement('tr');
@@ -116,25 +117,14 @@ async function filtrarMuestras(informanteId, variedadId) {
                     const pesableCell = document.createElement('td');
                     pesableCell.textContent = muestra.EsPesable === true ? 'Si' : (muestra.EsPesable === false ? 'No' : 'N/A');
                     row.appendChild(pesableCell);
+
+                    const cantidadCell = document.createElement('td');
+                    cantidadCell.textContent = `${Number.parseInt(muestra.CantidadAnt, 10)}` || 'N/A';
+                    row.appendChild(cantidadCell);    
                     
                     const precioCell = document.createElement('td');
                     precioCell.textContent = `${Number.parseFloat(muestra.PrecioRecolectadoAnt || 0).toFixed(2)}` || 'N/A';
                     row.appendChild(precioCell);
-
-                    const cantidadCell = document.createElement('td');
-                    cantidadCell.textContent = `${Number.parseInt(muestra.CantidadAnt, 10)}` || 'N/A';
-                    row.appendChild(cantidadCell);                   
-
-                    // //Acción - Botón Editar
-                    // const accionCell = document.createElement('td');
-                    // const btnEditar = document.createElement('button');
-                    // btnEditar.className = 'btn btn-warning btn-sm';
-                    // btnEditar.textContent = 'Editar';
-                    // btnEditar.onclick = () => SeleccionarMuestra(muestra.VariedadId);
-                    // btnEditar.style.margin = '2px';
-                    // btnEditar.style.padding = '5px 10px';                    
-                    // accionCell.appendChild(btnEditar);
-                    // row.appendChild(accionCell);           
                     
                     muestrasBody.appendChild(row);
                 }
@@ -288,8 +278,7 @@ function setCurrentDateTime() {
 }
 
 function limpiarVariedadDetalle(obj) {  
-    document.getElementById('resultadosContainer').style.display = 'none';    
-    //sMuestra="";
+    document.getElementById('resultadosContainer').style.display = 'none';
     $('#undmSelect').select2("val", "ca");
     if (obj ==="nuevo") {
         $('#variedadesSelect').select2("val", "ca");
@@ -323,6 +312,7 @@ async function insertarSeriePrecio() {
     try {
         // Obtener elementos del DOM
         const semanaSelect = document.getElementById('semanasSelect');
+        const diasSelect = document.getElementById('diasSelect');        
         const informanteSelect = document.getElementById('informantesSelect');
         const variedadesSelect = document.getElementById('variedadesSelect');
         const resultadoSelect = document.getElementById('resultadoSelect');
@@ -349,8 +339,10 @@ async function insertarSeriePrecio() {
             throw new Error('Faltan elementos del formulario requeridos');
         }       
 
-        // Obtener valores limpios y validar tipos        
+        // Obtener valores limpios y validar tipos      
+        var peso;  
         const semana = validarNumero(semanaSelect.value, 'Semana', true);
+        const dia = validarCampoTexto(diasSelect.value);
         const informanteId = validarCampoTexto(informanteSelect.value, 'Informante');
         const variedadId = validarCampoTexto(variedadesSelect.value, 'Variedad');
         const fecha = validarFecha(fechaInput.value.trim(), 'Fecha');
@@ -366,7 +358,8 @@ async function insertarSeriePrecio() {
         const precio = validarNumero(precioInput?.value, 'Precio', true);
         const undm = validarCampoTexto(undmSelect?.value, 'Unidad de medida');
         const tipomoneda = validarNumero(tipomonedaSelect?.value, 'Tipo de moneda', true);
-        const peso = validarNumero(pesoInput?.value, 'Peso', false);
+        if (estado === 4) { peso = validarNumero(pesoInput?.value, 'Peso', false); }
+        else { peso = null }        
         const preciosustituido = validarNumero(preciosustituidoInput?.value, 'Precio sustituido', false);
         const nveces = validarNumero(nvecesInput?.value, 'Número de veces', false);
         const porcentajedescuento = validarNumero(porcentajedescuentoInput?.value, 'Porcentaje de descuento', false);
@@ -379,10 +372,53 @@ async function insertarSeriePrecio() {
         let iva = null;
         let propina = null;
 
-        const ofertaCheck = $("#ofertachk input[type='checkbox']");
+        const ofertaCheck = $("#ofertachk input[type='checkbox']");        
+
+        // Convertir los checkboxes en array para trabajar con ellos
+        const checkboxesoferta = Array.from(ofertaCheck);
+
+        // Validación especial si el estado es 4
+        if (estadoSelect.value == 4) {
+            if (checkboxesoferta.length === 0 || !checkboxesoferta.some(cb => $(cb).prop('checked'))) {
+                throw new Error("Debe seleccionar al menos una opción para 'Oferta' cuando el estado es Ninguno.");
+            }
+        }
+
         const descuentoCheck = $("#descuentochk input[type='checkbox']");
+
+        // Convertir los checkboxes en array para trabajar con ellos
+        const checkboxesdescuento = Array.from(descuentoCheck);
+
+        // Validación especial si el estado es 4
+        if (estadoSelect.value == 4) {
+            if (checkboxesdescuento.length === 0 || !checkboxesdescuento.some(cb => $(cb).prop('checked'))) {
+                throw new Error("Debe seleccionar al menos una opción para 'Descuento' cuando el estado es Ninguno.");
+            }
+        }
+
         const ivaCheck = $("#ivachk input[type='checkbox']");
+
+        // Convertir los checkboxes en array para trabajar con ellos
+        const checkboxesiva = Array.from(ivaCheck);
+
+        // Validación especial si el estado es 4
+        if (estadoSelect.value == 4) {
+            if (checkboxesiva.length === 0 || !checkboxesiva.some(cb => $(cb).prop('checked'))) {
+                throw new Error("Debe seleccionar al menos una opción para 'Iva' cuando el estado es Ninguno.");
+            }
+        }
+
         const propinaCheck = $("#propinachk input[type='checkbox']");
+
+        // Convertir los checkboxes en array para trabajar con ellos
+        const checkboxespropina = Array.from(propinaCheck);
+
+        // Validación especial si el estado es 4
+        if (estadoSelect.value == 4) {
+            if (checkboxespropina.length === 0 || !checkboxespropina.some(cb => $(cb).prop('checked'))) {
+                throw new Error("Debe seleccionar al menos una opción para 'Propina' cuando el estado es Ninguno.");
+            }
+        }
 
         for (const value of ofertaCheck) {
             if ($(value).prop('checked') === true) {
@@ -414,6 +450,7 @@ async function insertarSeriePrecio() {
             VariedadId: variedadId,
             Anio: anio,
             Mes: mes,
+            Dia: dia,
             muestraid : muestraid,
             Semana: semana,
             Fecha: fechaa,
@@ -430,14 +467,16 @@ async function insertarSeriePrecio() {
             TienePropina: propina,
             MonedaId: tipomoneda,
             EstadoProductoId: estado,
-            PrecioSustituidoR : 0,
-            PrecioSustituidoC: preciosustituido,
+            PrecioSustituidoR : preciosustituido,
+            PrecioSustituidoC: 0,
             ObservacionEnumerador: observaciones,
             FechaCreacion : fecha,
             CreadoPor :  usuario,            
             Resultado: resultado, // no
             Nveces: nveces, //no
-            Enviado: false //no
+            Enviado: false, //no
+            CoordenadaX: Number.parseFloat($("#lblLongitud").val()),
+            CoordenadaY: Number.parseFloat($("#lblLatitud").val())
         };
 
         // Conectar a la base de datos
@@ -452,12 +491,16 @@ async function insertarSeriePrecio() {
         request.onsuccess = () => {
             console.log('Registro insertado/actualizado:', seriePrecio);
             mostrarMensaje('Registro guardado exitosamente', 'success');
+            alertify.set('notifier','position', 'bottom-center');
+            alertify.success('Registro guardado exitosamente');
         };
 
         // Manejar errores
         transaction.onerror = (event) => {
             console.error('Error en transacción:', event.target.error);
             mostrarMensaje(`Error al guardar: ${event.target.error.message}`, 'danger');
+            alertify.set('notifier','position', 'bottom-center');
+            alertify.error(`Error al guardar: ${event.target.error.message}`);
         };
 
         // Completar transacción
@@ -525,10 +568,12 @@ async function InsertarRegistroNoRealizado() {
 
         // Configuración común desde formulario
         const semanaSelect = document.getElementById('semanasSelect');
+        const diasSelect = document.getElementById('diasSelect');        
         const fechaInput = document.getElementById('fechaInput') || { value: new Date().toISOString().split('T')[0] };
         const usuarioInput = document.getElementById('hidden-usuarioId');
 
-        const semana = Number.parseInt(semanaSelect.value); 
+        const semana = Number.parseInt(semanaSelect.value);
+        const dia = validarCampoTexto(diasSelect.value);  
         const anio = Number.parseInt(document.getElementById('anio').value, 10);
         const mes = Number.parseInt(document.getElementById('mes').value, 10);        
         const cantidad = Number.parseInt(1);
@@ -538,16 +583,16 @@ async function InsertarRegistroNoRealizado() {
         const peso = null;
         const preciosustituido = null;
         const porcentajedescuento = null;
-        const observaciones = "";
+        const observaciones = null;
         const usuario = validarCampoTexto(usuarioInput?.value, 'Usuario');
-        const oferta = false; // Asumiendo valores booleanos fijos
-        const descuento = false;
-        const iva = false;
-        const propina = false;
+        const oferta = null; // Asumiendo valores booleanos fijos
+        const descuento = null;
+        const iva = null;
+        const propina = null;
 
         const fecha = validarFecha(fechaInput.value.trim(), 'Fecha');
-        const resultado = Number.parseInt(1);
-        const estado = Number.parseInt(1);
+        const resultado = Number.parseInt(2);
+        const estado = Number.parseInt(0);
 
         // Paso 3: Insertar en "SeriesPrecios" para cada registro
         const transactionSeries = db.transaction("SeriesPrecios", "readwrite");
@@ -559,6 +604,7 @@ async function InsertarRegistroNoRealizado() {
                 VariedadId: registro.VariedadId,
                 Anio: anio,
                 Mes: mes,
+                Dia: dia,
                 muestraid : registro.muestraid,
                 Semana: semana,
                 Fecha: registro.Fecha,
@@ -575,14 +621,16 @@ async function InsertarRegistroNoRealizado() {
                 TienePropina: propina,
                 MonedaId: tipomoneda,
                 EstadoProductoId: estado,
-                PrecioSustituidoR: null,
-                PrecioSustituidoC: preciosustituido,
+                PrecioSustituidoR: preciosustituido,
+                PrecioSustituidoC: null,
                 ObservacionEnumerador: observaciones,
                 FechaCreacion: fecha,
                 CreadoPor: usuario,
                 Resultado: resultado,
                 Nveces: Number.parseInt(registro.Nveces) + 1,
-                Enviado: false
+                Enviado: false,
+                CoordenadaX: Number.parseFloat($("#lblLongitud").val()),
+                CoordenadaY: Number.parseFloat($("#lblLatitud").val())
             };
             
             const requestPut = storeSeries.put(seriePrecio);
@@ -600,6 +648,8 @@ async function InsertarRegistroNoRealizado() {
         });
 
         mostrarMensaje('Registros guardados exitosamente', 'success');
+        alertify.set('notifier','position', 'bottom-center');
+        alertify.success('Registros guardados exitosamente');
         return {
             success: true,
             message: `Se insertaron ${variedadesUnicas.length} registros.`,
@@ -608,6 +658,8 @@ async function InsertarRegistroNoRealizado() {
     } catch (error) {
         console.error('Error en InsertarRegistroNoRealizado:', error);
         mostrarMensaje(`Error: ${error.message}`, 'danger');
+        alertify.set('notifier','position', 'bottom-center');
+        alertify.error(`Error: ${error.message}`);
         return {
             success: false,
             message: error.message
@@ -779,55 +831,110 @@ async function cargarSeriePrecio(informanteId, variedadId) {
     }
 }
 
-// Función auxiliar para rellenar el formulario con los datos encontrados
-async function rellenarFormulario(registro) {
-    // Campos de texto
-    $("#estadoSelect").val(registro.EstadoProductoId).trigger("change");    
-    $("#cantidadInput").val(registro.Cantidad);
-    $("#precioInput").val(registro.PrecioRecolectado);
+// Función auxiliar para rellenar checkbox
+function setCheckboxState(yesId, noId, value) {
+    const yesElem = document.getElementById(yesId);
+    const noElem = document.getElementById(noId);
+    if (yesElem && noElem) {
+        yesElem.checked = value === true;
+        noElem.checked = value !== true;
+    }
+}
+
+//funcion con los datos incontrados rellena input
+function setFormFields(registro) {
+    $("#estadoSelect").val(registro.EstadoProductoId).trigger("change");
     setTimeout(() => {
         $("#undmSelect").val(registro.UnidadMedidaId).trigger("change");
     }, 200);
-    $("#tipomonedaSelect").val(registro.MonedaId).trigger("change");   
+    $("#tipomonedaSelect").val(registro.MonedaId).trigger("change");
     $("#pesoInput").val(registro.Peso);
-    $("#preciosustituidoInput").val(registro.PrecioSustituidoC);    
-    $("#nvecesInput").val(registro.Nveces);   
-    if (registro.EsOferta === true) {
-        document.getElementById("ofertasi").checked = true;
-        document.getElementById("ofertano").checked = false;
-    }
-    else {
-        document.getElementById("ofertasi").checked = false;
-        document.getElementById("ofertano").checked = true;
-    }
-    if (registro.TieneDescuento === true) {
-        document.getElementById("descuentosi").checked = true;
-        document.getElementById("descuentono").checked = false;
-    }
-    else {
-        document.getElementById("descuentosi").checked = false;
-        document.getElementById("descuentono").checked = true;
-    }
-    $("#porcentajedescuentoInput").val(registro.Descuento);
-    if (registro.TieneIva === true) {
-        document.getElementById("ivasi").checked = true;
-        document.getElementById("ivano").checked = false;
-    }
-    else {
-        document.getElementById("ivasi").checked = false;
-        document.getElementById("ivano").checked = true;
-    }
-    if (registro.TienePropina === true) {
-        document.getElementById("propinasi").checked = true;
-        document.getElementById("propinano").checked = false;
-    }
-    else {
-        document.getElementById("propinasi").checked = false;
-        document.getElementById("propinano").checked = true;
-    }
-    $("#observacionesInput").val(registro.ObservacionEnumerador);
+    if (registro.EsPesable === true) { $("#pesoInput").prop("disabled", false);
+    } else  { $("#pesoInput").prop("disabled", true );}
+    
+    $("#preciosustituidoInput").val(registro.PrecioSustituidoR);
+    $("#cantidadInput").val(registro.Cantidad);
+    $("#precioInput").val(registro.PrecioRecolectado);
+    $("#nvecesInput").val(registro.Nveces);
+}
 
-    // Mostrar mensaje de éxito
+//funcion con los datos encontrados marcar checkbox
+function setEstadoProductoCheckboxes(registro) {
+    setCheckboxState("ofertasi", "ofertano", registro.EsOferta);
+    setCheckboxState("descuentosi", "descuentono", registro.TieneDescuento);
+    $("#porcentajedescuentoInput").val(registro.Descuento);
+    setCheckboxState("ivasi", "ivano", registro.TieneIva);
+    setCheckboxState("propinasi", "propinano", registro.TienePropina);
+}
+
+// funcion para mostrar el detalle del informante
+async function getInformanteDetalle(codInformante, semana) {
+const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('InformanteDetalle', 'readonly');
+    const store = tx.objectStore('InformanteDetalle');
+
+    // Asegurarse de que los campos sean string si así se guardaron
+    const key = [String(codInformante), Number.parseInt(semana)];
+
+    const req = store.get(key);
+
+    req.onsuccess = () => {
+      const registro = req.result;
+      if (registro) {
+        // Llenar los inputs con los datos del registro
+        document.getElementById('direccionInput').value = registro.Direccion || '';
+        document.getElementById('regionInput').value = registro.Region || '';
+        document.getElementById('cvariedadesInput').value = registro.Cantidad || '';
+
+        resolve(registro);
+      } else {
+        console.warn('No se encontró ningún registro con la clave:', key);
+        // Limpiar los campos si no hay resultado
+        document.getElementById('direccionInput').value = '';
+        document.getElementById('regionInput').value = '';
+        document.getElementById('cvariedadesInput').value = '';
+        resolve(null); // Resolvemos con null si no se encuentra
+      }
+    };
+
+    req.onerror = () => {
+      console.error('Error al buscar el registro:', req.error);
+      reject(req.error);
+    };
+  });
+}
+
+// Función para rellenar el formulario con los datos encontrados
+async function rellenarFormulario(registro) {    
+    $("#lblLongitud").val(registro.CoordenadaX);
+    $("#lblLatitud").val(registro.CoordenadaY);
+
+    if (registro.Resultado === 1) {
+        setFormFields(registro);
+
+        if (registro.EstadoProductoId === 4) {
+            setEstadoProductoCheckboxes(registro);
+        }
+
+        $("#observacionesInput").val(registro.ObservacionEnumerador);
+
+        if (registro.EstadoProductoId === 4) {
+            $("#guardarBtn").prop("disabled", false );
+            $("#variedadDetalle").css({ opacity: 1 });
+            $("#variedadDetalle").css("pointer-events", "auto"); 
+        }
+        else {
+            $("#guardarBtn").prop("disabled", true );    
+        }
+       
+    } else {
+        $("#resultadoSelect").val(registro.Resultado).trigger("change");
+        $("#filtrarBtn").prop("disabled", true );
+        $("#variedadDetalle").css({ opacity: 0.5 });
+        $("#variedadDetalle").css("pointer-events", "none");
+    }
+
     mostrarMensaje("Datos cargados correctamente", "success");
 }
 
@@ -934,7 +1041,7 @@ async function compararRegistros(informanteId) {
     }
 }
 
-async function mostrarDiferencias(informanteId) {
+async function mostrarDiferencias(informanteId, semana) {
     try {
         const db = await IniciarBaseDatos();
         
@@ -942,23 +1049,39 @@ async function mostrarDiferencias(informanteId) {
         const muestraMap = new Map(); // VariedadId -> descripcion
         const muestraTransaction = db.transaction('Muestra', 'readonly');
         const muestraStore = muestraTransaction.objectStore('Muestra');
-        const muestraCursorRequest = muestraStore.openCursor();
+        //! const muestraCursorRequest = muestraStore.openCursor();
+       
+        const index = muestraStore.index('BuscarxInformanteYSemana');
+
+        const request = index.getAll([String(informanteId), Number.parseInt(semana)]);
+
+        request.onsuccess = function(event) {
+            const results = event.target.result;
+            if (results.length > 0) {
+                // Procesar los resultados
+                results.forEach(registro => {
+                    muestraMap.set(registro.VariedadId, registro.Descripcion);
+                });
+            } else {
+                console.warn('No se encontraron registros para la combinación Informante y Semana');
+            }
+        };
 
         // 2. Construir mapa de descripciones de Muestra
-        await new Promise((resolve, reject) => {
-            muestraCursorRequest.onsuccess = (event) => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    if (cursor.key[0] === informanteId.trim()) {
-                        muestraMap.set(cursor.key[1], cursor.value.Descripcion);
-                    }
-                    cursor.continue();
-                } else {
-                    resolve();
-                }
-            };
-            muestraCursorRequest.onerror = reject;
-        });
+        // await new Promise((resolve, reject) => {
+        //     muestraCursorRequest.onsuccess = (event) => {
+        //         const cursor = event.target.result;
+        //         if (cursor) {
+        //             if (cursor.key[0] === informanteId.trim()) {
+        //                 muestraMap.set(cursor.key[1], cursor.value.Descripcion);
+        //             }
+        //             cursor.continue();
+        //         } else {
+        //             resolve();
+        //         }
+        //     };
+        //     muestraCursorRequest.onerror = reject;
+        // });
 
         // 3. Obtener todas las variedades ya registradas en SeriesPrecios
         const seriesSet = new Set();
@@ -1002,9 +1125,99 @@ async function mostrarDiferencias(informanteId) {
     }
 }
 
-async function enviarDatos() {
+async function marcarInformantesConDatosHoy() {
+    const db = await openDB();
+    const informantesSelect = $('#informantesSelect'); // Usamos jQuery para select2
+
+    // Obtener fecha de hoy en formato ISO
+    const hoy = new Date();
+    const hoyStr = hoy.toISOString().split('T')[0]; // "YYYY-MM-DD"
+    const fechaInicio = hoyStr + 'T00:00:00';
+    const fechaFin = hoyStr + 'T23:59:59';
+
+    const informantesHoy = new Set();
+
+    const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+    const almacenSeries = transaction.objectStore('SeriesPrecios');
+    const index = almacenSeries.index('BuscarPorFechaCreacion');
+    const fechaRango = IDBKeyRange.bound(fechaInicio, fechaFin);
+    const cursorRequest = index.openCursor(fechaRango);
+
+    cursorRequest.onsuccess = function(event) {
+        const cursor = event.target.result;
+        if (cursor) {
+            const registro = cursor.value;
+            const informanteId = registro.InformanteId;
+
+            if (informanteId !== undefined) {
+                informantesHoy.add(informanteId);
+            }
+
+            cursor.continue(); // Continuar al siguiente
+        } else {
+            // cursor terminando => inicializar select2 con plantilla personalizada
+            inicializarSelect2ConMarcacion(informantesSelect, informantesHoy);
+            //actualizarSelect2(informantesSelect, informantesHoy);
+        }
+    };
+
+    cursorRequest.onerror = function(event) {
+        console.error("Error al leer los datos de SeriesPrecios:", event.target.error);
+    };
+}
+
+// Función que inicializa select2 con templateResult para marcar opciones
+function inicializarSelect2ConMarcacion(selectElement, informantesHoySet) {
+    // Destruir instancia previa si existe (para reinicializar)
+    if (selectElement.hasClass('select2-hidden-accessible')) {
+        selectElement.select2('destroy');
+    }
+    // Iniciar select2 con templateResult para opciones
+    selectElement.select2({
+        width: 'resolve',
+        templateResult: function(option) {
+            if (!option.id) {
+                return option.text;
+            }
+            // Crear contenedor jQuery para aplicar estilos
+            const $option = $('<span></span>').text(option.text);
+            if (informantesHoySet.has(option.id)) {
+                $option.addClass('informante-datos-hoy');
+                $option.attr('title', 'Este informante tiene datos hoy');
+            }
+            return $option;
+        },
+        // También manejamos templateSelection para título al mostrar selección
+        templateSelection: function(option) {
+            if (!option.id) {
+                return option.text;
+            }
+            let $selection = $('<span></span>').text(option.text);
+            if (informantesHoySet.has(option.id)) {
+                $selection.attr('title', 'Este informante tiene datos hoy');
+            }
+            return $selection;
+        },
+        escapeMarkup: function(markup) { return markup; } // Permite HTML en templates
+    });
+}
+
+function actualizarSelect2(selectElement, informantesHoy) {
+    // Iterar sobre las opciones del select2
+    selectElement.find('option').each(function() {
+        const optionValue = $(this).val();
+        const tieneDatosHoy = informantesHoy.has(optionValue);
+        // Cambiar el color de fondo y el título
+        $(this).toggleClass('informante-datos-hoy', tieneDatosHoy);
+        $(this).attr('title', tieneDatosHoy ? "Este informante tiene datos hoy" : "");
+    });
+    // Actualizar el select2 para reflejar los cambios
+    selectElement.select2(); // Re-inicializar select2 para aplicar cambios
+}
+
+async function enviarDatos(obj) {
     try {
-        const response = await jsonSeriesPrecios();
+        const response = await jsonSeriesPrecios(obj);
         const registrosNoEnviados = response.SeriesPrecios_; // Extraemos los registros no enviados
         if (registrosNoEnviados.length === 0) {           
             mostrarMensaje("No hay registros pendientes por enviar", "success");
@@ -1012,12 +1225,12 @@ async function enviarDatos() {
         }
 
         const jsonData = JSON.stringify(response); // Convertir a JSON
-        // ? console.log("Datos a enviar:", jsonData);
+        //console.error("Datos a enviar:", jsonData);
 
         const messageDiv = document.getElementById('message');
         messageDiv.classList.add('d-none'); // Ocultar mensaje anterior
 
-        // Hacer la solicitud AJAX POST
+        //Hacer la solicitud AJAX POST  https://localhost:7062  https://appcepov.inide.gob.ni
         $.ajax({
             url: 'https://appcepov.inide.gob.ni/endpoint/cipc/bulksupin', // Reemplaza con la URL de tu endpoint
             type: 'POST',
@@ -1045,7 +1258,7 @@ async function enviarDatos() {
     }
 }
 
-async function jsonSeriesPrecios() {
+async function jsonSeriesPrecios(obj) {
     try {
         const db = await openDB();
         const transaction = db.transaction(['SeriesPrecios'], 'readonly');
@@ -1054,10 +1267,105 @@ async function jsonSeriesPrecios() {
 
         return new Promise((resolve, reject) => {
             request.onsuccess = () => {
-                // Filtrar los registros que no han sido enviados y que son pesables
+                // Filtro según el valor de obj
+                const registrosNoEnviados = request.result.filter(item => {
+                    const baseCondition = item.Enviado === false && item.EsPesable === obj;
+
+                    if (!baseCondition) return false;
+
+                    // Si es pesable (obj === true), verificar que Peso sea válido
+                    if (obj === true) {
+                        return item.Peso === null ||  item.Peso > 0;
+                    }
+
+                    return true; // Para obj === false, no hay más condiciones
+                });
+
+                // Mapeo de SeriesPrecios_
+                const SeriesPrecios_ = registrosNoEnviados.map(item => ({
+                    InformanteId: item.InformanteId,
+                    VariedadId: item.VariedadId,
+                    Anio: item.Anio,
+                    Mes: item.Mes,
+                    muestraid: item.muestraid,
+                    Semana: item.Semana,
+                    Fecha: item.Fecha,
+                    PrecioRecolectado: item.PrecioRecolectado,
+                    PrecioAnterior: item.PrecioAnterior,
+                    Peso: item.Peso,
+                    Cantidad: item.Cantidad,
+                    UnidadMedidaId: item.UnidadMedidaId,
+                    EsOferta: Boolean(item.EsOferta),
+                    TieneDescuento: Boolean(item.TieneDescuento),
+                    Descuento: item.Descuento,
+                    TieneIva: Boolean(item.TieneIva),
+                    TienePropina: Boolean(item.TienePropina),
+                    MonedaId: item.MonedaId,
+                    EstadoProductoId: item.EstadoProductoId,
+                    PrecioSustituidoR: item.PrecioSustituidoR,
+                    PrecioSustituidoC: item.PrecioSustituidoC,
+                    ObservacionEnumerador: item.ObservacionEnumerador,
+                    FechaCreacion: item.FechaCreacion,
+                    CreadoPor: item.CreadoPor
+                }));
+
+                // Mapeo de Muestras
+                const Muestras = registrosNoEnviados.map(item => ({
+                    InformanteId: item.InformanteId,
+                    VariedadId: item.VariedadId,
+                    Nveces: item.Nveces
+                }));
+
+                // Creación de Informantes sin duplicados
+                const informantesMap = new Map();
+                registrosNoEnviados.forEach(item => {
+                    const codInformante = item.InformanteId;
+                    if (!informantesMap.has(codInformante)) {
+                        informantesMap.set(codInformante, {
+                            CodInformante: codInformante,
+                            NombreInformante: "",
+                            Direccion: "",
+                            DistritoId: "",
+                            Activo: true,
+                            CoordenadaX: item.CoordenadaX,
+                            CoordenadaY: item.CoordenadaY
+                        });
+                    }
+                });
+
+                const Informantes = Array.from(informantesMap.values());
+
+                // Resolución del resultado
+                resolve({
+                    SeriesPrecios_: SeriesPrecios_,
+                    Muestras: Muestras,
+                    Informantes: Informantes
+                });
+            };
+
+            request.onerror = () => {
+                reject("Error al obtener los registros de SeriesPrecios");
+            };
+        });
+    } catch (error) {
+        console.error("Error al abrir la base de datos:", error);
+        throw error;
+    }
+}
+
+async function jsonSeriesPrecios1(obj) {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+        const store = transaction.objectStore('SeriesPrecios');
+        const request = store.getAll();
+
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                // Filtrar los registros que no han sido enviados y que son no pesables
                 const registrosNoEnviados = request.result.filter(item => 
-                    item.Enviado === false  // && item.EsPesable === true
-                );
+                    item.Enviado === true   && item.EsPesable === obj
+                );  
 
                 const SeriesPrecios_ = registrosNoEnviados.map(item => ({
                     InformanteId: item.InformanteId,
@@ -1090,11 +1398,30 @@ async function jsonSeriesPrecios() {
                     InformanteId: item.InformanteId,
                     VariedadId: item.VariedadId,
                     Nveces : item.Nveces
-                }));                
+                }));
+
+                // Usamos un Set para evitar duplicados por CodInformante
+                const informantesMap = new Map();
+                registrosNoEnviados.forEach(item => {
+                    const codInformante = item.InformanteId;
+                    if (!informantesMap.has(codInformante)) {
+                        informantesMap.set(codInformante, {
+                            CodInformante: codInformante,
+                            NombreInformante: "",
+                            Direccion: "",
+                            Activo: true,
+                            CoordenadaX: item.CoordenadaX,
+                            CoordenadaY: item.CoordenadaY
+                        });
+                    }
+                });
+
+                const Informantes = Array.from(informantesMap.values());
 
                 resolve({
                     SeriesPrecios_: SeriesPrecios_,
-                    Muestras: Muestras
+                    Muestras: Muestras,
+                    Informantes: Informantes
                 });
             };
 
@@ -1251,6 +1578,512 @@ function mostrarListadoFaltantes(faltantes, muestraMap) {
         const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
     }
+}
+
+async function obtenerValidaMuestra(empleado) {
+    try {
+        // Obtener datos desde la API https://appcepov.inide.gob.ni https://localhost:7062
+        const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/Validamuestra/${empleado}`,  {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            },
+            mode: 'cors'
+        });
+
+        if (!response.ok) {
+            const errorResponse = await response.json();
+            const errorMessage = errorResponse.mensaje || `Error en la solicitud HTTP: ${response.status}`;
+            throw new Error(errorMessage);
+            //throw new Error(`Error en la solicitud HTTP: ${response.status}`);
+        }
+
+        const catalog = await response.json();
+
+        if (!catalog || !Array.isArray(catalog)) {
+            throw new Error('Formato de respuesta inválido');
+        }
+
+        // Mostrar modal con los resultados
+        const modalBody = document.getElementById("modalFaltantesBody");
+        const modalTitle = document.getElementById("modalFaltantesLabel");
+
+        if (catalog.length === 0) {
+            modalTitle.textContent = "Sin Registros Faltantes";
+            modalBody.innerHTML = `
+                <div class="alert alert-success text-center" role="alert">
+                    ¡No hay informantes con variedades faltantes!
+                </div>
+            `;
+        } else {
+            modalTitle.textContent = "Informantes con Variedades Faltantes";
+
+            const listGroup = document.createElement("ul");
+            listGroup.className = "list-group list-group-flush";
+
+            catalog.forEach(item => {
+                const li = document.createElement("li");
+                li.className = "list-group-item d-flex justify-content-between align-items-center";
+                li.innerHTML = `
+                    <span><strong>${item.nombreInformante}</strong></span>
+                    <button class="btn btn-sm btn-primary" onclick="irMuestra(${item.semana}, '${item.diaSemanaId}', '${item.codInformante.trim()}')">
+                        Ver
+                    </button>                    
+                `; //<span class="badge bg-danger rounded-pill">${item.Cantidad} variedades</span>
+                listGroup.appendChild(li);
+            });
+
+            modalBody.innerHTML = "";
+            modalBody.appendChild(listGroup);
+        }
+
+        // Mostrar el modal
+        const bsModal = new bootstrap.Modal(document.getElementById("modalFaltantes"));
+        bsModal.show();
+
+        return {
+            success: true,
+            message: `Informantes con variedades faltantes: ${catalog.length}`,
+            data: catalog
+        };
+
+    } catch (error) {
+        console.error("Error al validar muestras:", error);
+        const modalBody = document.getElementById("modalFaltantesBody");
+        const modalTitle = document.getElementById("modalFaltantesLabel");
+
+        modalTitle.textContent = "Error al Validar Muestras";
+        modalBody.innerHTML = `
+            <div class="alert alert-danger text-center" role="alert">
+                Error al obtener los datos: ${error.message}
+            </div>
+        `;
+
+        const bsModal = new bootstrap.Modal(document.getElementById("modalFaltantes"));
+        bsModal.show();
+
+        return {
+            success: false,
+            message: error.message,
+            data: []
+        };
+    }
+}
+
+async function mostrarPesableFaltante() {
+  try {
+    const db = await openDB();
+
+    // 1. Obtener todos los registros válidos de SeriesPrecios
+    const records = await getValidSeriesRecords(db);
+
+    if (!records.length) {
+      // Mostrar modal sin resultados
+      mostrarModal([]);
+      return {
+        success: true,
+        message: "No hay registros con pesables faltantes"
+      };
+    }
+
+    // 2. Procesar cada registro para obtener NombreInformante y Descripcion
+    const resultado = [];
+
+    for (const record of records) {
+      const informanteId = record.InformanteId;
+      const variedadId = record.VariedadId;
+      const semana = record.Semana;
+      const dia = record.Dia;
+
+      const [informante, variedad] = await Promise.all([
+        getInformante(db, informanteId),
+        getVariedad(db, variedadId, informanteId)
+      ]);
+
+      if (informante && variedad) {
+        resultado.push({
+          NombreInformante: informante.NombreInformante,
+          Descripcion: variedad.Descripcion,
+          Semana: semana,
+          Dia: dia,
+          InformanteId: informanteId
+        });
+      }
+    }
+
+    // 3. Mostrar resultados
+    mostrarModal(resultado);
+
+    db.close();
+
+    return {
+      success: true,
+      message: `Informantes con variedades faltantes: ${resultado.length}`,
+      data: resultado
+    };
+
+  } catch (error) {
+    console.error("Error en mostrarPesableFaltante:", error);
+    return {
+      success: false,
+      message: `Error al procesar datos: ${error.message}`
+    };
+  }
+}
+
+function getValidSeriesRecords(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('SeriesPrecios', 'readonly');
+    const store = tx.objectStore('SeriesPrecios');
+    const records = [];
+
+    const cursor = store.openCursor();
+
+    cursor.onsuccess = function(e) {
+      const c = e.target.result;
+      if (c) {
+        const record = c.value;
+
+        if (
+          record.EsPesable === true &&
+          record.Enviado === false &&
+          record.Peso === Number.parseInt(0)
+          //(record.Peso <= 0 || record.Peso === null)
+        ) {
+          records.push(record);
+        }
+
+        c.continue();
+      } else {
+        resolve(records);
+      }
+    };
+
+    cursor.onerror = function(e) {
+      reject(e.target.error);
+    };
+  });
+}
+
+function getInformante(db, informanteId) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('Informantes', 'readonly');
+    const store = tx.objectStore('Informantes');
+    const req = store.get(informanteId);
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getVariedad(db, variedadId, informanteId) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('Variedades', 'readonly');
+    const store = tx.objectStore('Variedades');
+    // Forzar ambos valores a ser strings y mantener el formato esperado
+    const key = [String(variedadId), String(informanteId)];
+    const req = store.get(key);
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function mostrarModal(resultado) {
+  const modalBody = document.getElementById("modalFaltantesBody");
+  const modalTitle = document.getElementById("modalFaltantesLabel");
+
+  if (resultado.length === 0) {
+    modalTitle.textContent = "Sin Registros Faltantes";
+    modalBody.innerHTML = `
+      <div class="alert alert-success text-center" role="alert">
+        ¡No hay informantes con pesables faltantes!
+      </div>
+    `;
+  } else {
+    modalTitle.textContent = "Informantes con Pesables Faltantes";
+
+    const listGroup = document.createElement("ul");
+    listGroup.className = "list-group list-group-flush";
+
+    resultado.forEach(item => {
+      const li = document.createElement("li");
+      li.className = "list-group-item d-flex justify-content-between align-items-center";
+      li.innerHTML = `
+                    <span><strong>${item.NombreInformante} - ${item.Descripcion}</strong></span>
+                    <button class="btn btn-sm btn-primary" onclick="irMuestra(${item.Semana}, '${item.Dia}', '${item.InformanteId.trim()}')">
+                        Ver
+                    </button>                    
+                `;
+    //   li.innerHTML = `<span><strong>${item.NombreInformante} - ${item.Descripcion}</strong></span>`;
+      listGroup.appendChild(li);
+    });
+
+    modalBody.innerHTML = "";
+    modalBody.appendChild(listGroup);
+  }
+
+  const bsModal = new bootstrap.Modal(document.getElementById("modalFaltantes"));
+  bsModal.show();
+}
+
+function irMuestra(semana, diaSemanaId, codInformante) {
+    // Obtener instancia del modal
+    const modalElement = document.getElementById('modalFaltantes');
+    const bsModal = bootstrap.Modal.getInstance(modalElement);
+
+    // Si el modal está abierto, cierra y limpia propiedades
+    if (bsModal) {
+        bsModal.hide(); // Cierra el modal
+
+        // Opcional: Eliminar la instancia del modal para que no se pueda reabrir
+        //bsModal.dispose(); 
+
+        // Opcional: Remover backdrop y backdrop de fondo si queda
+        const backdrop = document.querySelector('.modal-backdrop');
+        if (backdrop) {
+            backdrop.remove();
+        }
+
+        // Opcional: Deshabilitar el botón u otros elementos relacionados al modal
+        // const botonAbrirModal = document.querySelector('[data-bs-target="#modalFaltantes"]');
+        // if (botonAbrirModal) {
+        //     botonAbrirModal.disabled = true;
+        //     botonAbrirModal.classList.add('disabled');
+        // }
+    }
+
+    // Navegar a la nueva vista (ajusta esto según tu estructura)
+    loadView('ListarMuestra.html', () => {
+        // Asegúrate de que estos elementos existan antes de manipularlos
+        const semanasSelect = document.getElementById('semanasSelect');
+        const diasSelect = document.getElementById('diasSelect');
+
+        if (semanasSelect && diasSelect) {
+            // Seleccionar valor en los combos
+            $("#semanasSelect").val(semana).trigger("change");
+            $("#diasSelect").val(diaSemanaId).trigger("change");
+            filterAndPopulateInformantes().then(resultado => {
+                $("#informantesSelect").val(codInformante).trigger("change");
+                 mostrarDiferencias(codInformante,semana);
+                $('#resultadoSelect').select2("val", "ca");
+                $("#resultadoSelect").prop("disabled", false);     
+            });
+        } else {
+            console.warn("Alguno de los selects no existe aún.");
+        }
+    });
+}
+
+// Encapsula todos los eventos de ListarMuestra.html
+function setupListarMuestraEventListeners() {
+    // Manejador de evento para el botón de filtrar
+    document.getElementById('filtrarBtn').addEventListener('click', () => {
+        document.getElementById('variedadDetalle').style.display = 'block';
+    });                        
+
+    document.getElementById('limpiarBtn').addEventListener('click', () => {
+        limpiarVariedadDetalle("nuevo"); 
+    });
+
+    document.getElementById('guardarBtn').addEventListener('click', () => {
+        insertarSeriePrecio()
+        .then(resultado => {
+            if (!resultado.success) {
+                marcarInformantesConDatosHoy();
+                mostrarMensaje(`Error: ${resultado.message}`, 'error');
+            } 
+            else {
+                // Limpiar formulario después de guardar
+                limpiarVariedadDetalle("nuevo");
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error.message);
+        });
+    });
+    
+    document.getElementById('btnfiltrarIngresadas').addEventListener('click', () => {
+        const informanteId = $('#informantesSelect').val();
+        const semana = document.getElementById('semanasSelect'); 
+        mostrarDiferencias(informanteId, semana.value);
+    });
+    
+    $('#diasSelect').on('select2:select',  function (e) { 
+        filterAndPopulateInformantes()
+        .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.
+            return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
+        })
+        .catch(error => {
+            console.error("Ocurrió un error en la cadena de promesas:", error);
+            // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
+            // throw error;        
+        });
+    });
+
+    $('#informantesSelect').on('select2:select', async function (e) {
+        const informanteId = $(this).val();
+        const variedadDetalle = document.getElementById('variedadDetalle'); 
+        const semana = document.getElementById('semanasSelect'); 
+        try {
+            //? await compararRegistros(informanteId);
+            getLocation();            
+            getInformanteDetalle(informanteId, semana.value)
+            .then(registro => {
+                if (registro) {
+                console.log('Registro encontrado:', registro);
+                } else {
+                console.log('No se encontró registro.');
+                }
+            })
+            .catch(error => {
+                console.error('Error en la base de datos:', error);
+            });
+            mostrarDiferencias(informanteId, semana.value);                            
+            $('#resultadoSelect').select2("val", "ca");
+            $("#resultadoSelect").prop("disabled", false);                               
+            variedadDetalle.style.display = 'none';
+            limpiarVariedadDetalle("nuevo");
+
+            //? const cant = await actualizarCantidad(informanteId);
+            //? $("#cpproducto").val(cant);
+        } catch (error) {
+            console.log('Error al comparar registros:', error);
+            mostrarMensaje('No se puedo recuperar numerador.', "error");
+        }
+        
+
+        //? actualizarCantidad(informanteId).then(cant => {
+        //    $("#cpproducto").val(cant);
+        //}).catch(error => {
+        //    mostrarMensaje('No se puedo recuperar numerador.', "error");
+        //});
+    });
+    
+    // ✅ Alternativa usando evento de Select2
+    $('#resultadoSelect').on('select2:select', function (e) {                              
+        const estadoId = $(this).val();
+        if (estadoId==1) {
+            const informanteId = $("#informantesSelect").val().trim();
+            const variedadesSelect = document.getElementById('variedadesSelect');  
+            
+            // Habilitar el select
+            variedadesSelect.disabled = false;
+
+            // Limpiar el contenido del select
+            $(variedadesSelect).empty(); // Usar .empty() para limpiar el contenido
+            
+            // Mostrar mensaje de carga
+            variedadesSelect.innerHTML = '<option value="">Cargando variedades...</option>';
+
+            // Cargar variedades filtradas por informanteId
+            cargarSelect('Variedades', variedadesSelect, 'id', 'Descripcion', 'id', 'informanteId', informanteId);
+                                                    
+            // Si no hay variedades
+            if (variedadesSelect.options.length < 1) {
+                variedadesSelect.disabled = true;
+                variedadesSelect.innerHTML = '<option value="">No hay variedades para este informante</option>';
+            }
+                $("#filtrarBtn").prop("disabled", false);
+        } else {
+            $("#filtrarBtn").prop("disabled", true);
+            InsertarRegistroNoRealizado()
+            .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.
+                return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
+            })
+            .catch(error => {
+                console.error("Ocurrió un error en la cadena de promesas:", error);
+                // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
+                // throw error;        
+            });
+        }                            
+    });
+    $('#variedadesSelect').on('select2:select', async function (e) { 
+        const informanteId = document.getElementById('informantesSelect').value;                            
+        const variedadId = $(this).val();
+        const undmSelect = document.getElementById('undmSelect');  
+
+        // Validar al menos un filtro seleccionado
+        if (!informanteId || !variedadId) {
+            mostrarMensaje('Por favor seleccione ambos criterios de filtrado: Informante y Variedad.', "error");
+            return;
+        }                            
+        
+        // Llamar a la función para filtrar muestras
+        filtrarMuestras(informanteId, variedadId);
+
+        undmSelect.disabled = false;                          
+    
+        undmSelect.innerHTML = '<option value="">Cargando unidades...</option>';
+        // Cargar variedades filtradas por informanteId
+        await cargarSelect('UmedP', undmSelect, 'urecol', 'urecol', 'urecol', 'codproducto', variedadId);
+                                        
+        // Si no hay variedades
+        if (undmSelect.options.length < 1) {
+            undmSelect.disabled = true;
+            undmSelect.innerHTML = '<option value="">No hay unidades para esta variedad</option>';
+        } else {
+            // Cargar serie de precios
+            await  cargarSeriePrecio(informanteId, variedadId);
+        }  
+    });
+
+    $('#estadoSelect').on('select2:select', function (e) {
+        const estadoId = $(this).val();
+        const vecesn = Number.parseInt(sMuestra.Nveces) + 1;
+        const pesablees = sMuestra.EsPesable;
+        $("#cantidadInput").val(0);                            
+        $("#undmSelect").val(sMuestra.UnidadMedidaId).trigger("change");
+        if (estadoId > 0 && estadoId < 4) { 
+            $("#undmSelect").prop("disabled", true);
+            $("#cantidadInput").prop("disabled", true);
+            $("#precioInput").val(0)
+            $("#precioInput").prop("disabled", true);
+            $('#pesoInput').prop("disabled", true);
+            if (estadoId== 2) {
+                $('#preciosustituidoInput').prop("disabled", false);  
+            } else { $('#preciosustituidoInput').prop("disabled", true); }                                
+            $("#nvecesInput").val(vecesn);
+            $(".schk").prop("disabled", true);                        
+        }  else {
+            $("#undmSelect").prop("disabled", false); 
+            $("#cantidadInput").prop("disabled", false);
+            $("#precioInput").val(0);  
+            $("#precioInput").prop("disabled", false);
+            if (pesablees) {
+                    $('#pesoInput').prop("disabled", false);  
+            } else { $('#pesoInput').prop("disabled", true); }  
+            $('#preciosustituidoInput').val(0);
+            $('#preciosustituidoInput').prop("disabled", true);  
+            $(".schk").prop("disabled", false);
+            //? $('#ofertano').prop('checked', true);  
+            //? $('#descuentono').prop('checked', true);
+            //? $('#ivano').prop('checked', true);
+            //? $('#propinano').prop('checked', true);                       
+        } 
+        $("#tipomonedaSelect").val(1).trigger("change");                             
+    });    
+
+    $('#ofertachk').on('click', 'input[type=checkbox]', function () {
+        $('#ofertachk input[type=checkbox]').prop("checked", false);
+        $(this).prop("checked", true);
+    });
+
+    $('#descuentochk').on('click', 'input[type=checkbox]', function () {
+        $('#descuentochk input[type=checkbox]').prop("checked", false);
+        $(this).prop("checked", true);
+        $(this).val() == "true" ? $("#porcentajedescuentoInput").prop("disabled", false) : $("#porcentajedescuentoInput").prop("disabled", true);
+    });
+
+    $('#ivachk').on('click', 'input[type=checkbox]', function () {
+        $('#ivachk input[type=checkbox]').prop("checked", false);
+        $(this).prop("checked", true);
+    });
+
+    $('#propinachk').on('click', 'input[type=checkbox]', function () {
+        $('#propinachk input[type=checkbox]').prop("checked", false);
+        $(this).prop("checked", true);
+    });
 }
 
 // evalua el numerador del informante y devuelve su cantidad
@@ -1442,7 +2275,7 @@ async function actualizarNveces() {
         }
 
         // 2. Actualizar el campo Nveces
-        item.Nveces = 0;
+        //item.Nveces = 0;
         item.Enviado = false;
 
         // 3. Guardar el registro actualizado
@@ -1458,6 +2291,48 @@ async function actualizarNveces() {
         console.error("Error al actualizar el registro:", error);
     }
 }
+
+async function actualizarNveces2() {
+    try {
+        const db = await openDB(); // Usamos la función auxiliar definida antes
+        const transaction = db.transaction(["SeriesPrecios"], "readwrite");
+        const store = transaction.objectStore("SeriesPrecios");
+
+        // 1. Obtener todos los registros
+        const getAllRequest = store.getAll();
+
+        const items = await new Promise((resolve, reject) => {
+            getAllRequest.onsuccess = () => resolve(getAllRequest.result);
+            getAllRequest.onerror = () => reject("Error al obtener los registros.");
+        });
+
+        if (!items || items.length === 0) {
+            throw new Error("No se encontraron registros.");
+        }
+
+        // 2. Actualizar el campo deseado en todos los registros
+        items.forEach(item => {
+            item.Enviado = false; // Actualiza el campo Enviado a false
+            // Puedes agregar más campos a actualizar aquí si es necesario
+        });
+
+        // 3. Guardar los registros actualizados
+        const promises = items.map(item => {
+            const putRequest = store.put(item);
+            return new Promise((resolve, reject) => {
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject("Error al guardar el registro actualizado.");
+            });
+        });
+
+        await Promise.all(promises); // Esperar a que se guarden todos los registros
+
+        console.log("Todos los registros actualizados exitosamente.");
+    } catch (error) {
+        console.error("Error al actualizar los registros:", error);
+    }
+}
+
 
 function setCurrentDateTime2() {
     const input = document.getElementById('fechaInput');
