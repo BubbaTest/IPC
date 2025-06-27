@@ -28,7 +28,7 @@
     <!-- Scripts principales -->
     <script src="Scripts/bootstrap.bundle.min.js"></script>
     <script src="Scripts/jquery-3.5.1.min.js"></script>
-    <script src="https://unpkg.com/dexie@3.2.2/dist/dexie.js"></script>
+    <script src="Scripts/dexie.js"></script>
 </head>
 
 <body>
@@ -114,14 +114,13 @@
 
     <script> 
         const usuarioStr = localStorage.getItem('Benutzer');
-        console.error(usuarioStr);
         if (!usuarioStr) {
             document.getElementById("mensajeModal").textContent = "Debes iniciar sesión para acceder a esta página.";
             new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
             setTimeout(() => window.location.href = "acceso.html", 2000);
         } else {
             if (usuarioStr !== 'administrador' && usuarioStr !== 'Autoriza') {
-                // Si el usuario no es administrador o Connecter, mostrar mensaje de acceso denegado
+                // Si el usuario no es admin o Connecter, mostrar mensaje de acceso denegado
                 document.getElementById("mensajeModal").textContent = "No tienes permisos para acceder a esta página.";
                 new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
                 setTimeout(() => window.location.href = "acceso.html", 2000);
@@ -156,33 +155,6 @@
                     console.error('There was a problem with the fetch operation:', error);
                 });
         }       
-
-        async function Crearusuario() {
-            let claveStr = document.getElementById('pass').value;          
-            const Empleado = document.querySelector('#empleado').value.toUpperCase();
-
-            // Validar al menos un empleado seleccionado
-            if (!Empleado || !claveStr) {
-                mostrarMensaje("Por favor, digite código de empleado y contraseña.", "error");
-                return;
-            }
-
-            // CODIFICAR LA CONTRASEÑA EN BASE64
-            claveStr = Base64.encode(claveStr);
-            // HASHEAR LA CONTRASEÑA USANDO SHA-1
-            claveStr = await hashPassword(claveStr);
-
-            try {
-                const result = await agregarUsuario(Empleado, claveStr);
-                if (result.success) {
-                    mostrarMensaje(`${result.message}`, "success");            
-                } else {
-                    mostrarMensaje(`Error al importar usuarios: ${result.message}`, "error");                    
-                }
-            } catch (error) {
-                mostrarMensaje(`Error inesperado: ${error.message}`, "error");
-            }
-        }
 
         async function ImportaU() {
             const Empleado = document.querySelector('#empleado').value.toUpperCase();
@@ -229,15 +201,14 @@
                     mostrarMensaje(`${result.message}`, "success");
                     $("#btnCatalogos").prop("disabled", false);
                     $("#btnMuestra").prop("disabled", false);
-                    $("#btlEliminaBase").prop("disabled", false);
 
-                    //// Obtener el día actual
-                    // const today = new Date();
-                    // const day = today.getDate();
-                    // // Habilitar botones solo si el día es 1 o 15
-                    // if (day === 1 || day === 15) {
-                    //     $("#btlEliminaBase").prop("disabled", false);
-                    // }
+                    // Obtener el día actual
+                    const today = new Date();
+                    const day = today.getDate();
+                    // Habilitar botones solo si el día es 1 o 15
+                    if (day === 1 || day === 15) {
+                        $("#btlEliminaBase").prop("disabled", false);
+                    }
                 } else {
                     mostrarMensaje(`Error al importar usuarios: ${result.message}`, "error");                    
                 }

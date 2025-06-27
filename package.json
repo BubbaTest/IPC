@@ -1,13 +1,13 @@
 {
   "name": "dblocalapp",
   "version": "1.0.0",
-  "description": "Curso completo gratis aca: https://www.youtube.com/watch?v=4Dko5W96WHg",
+  "description": "IPC server for local app",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "Bubba",
   "license": "ISC",
   "dependencies": {
     "express": "4.18.1"

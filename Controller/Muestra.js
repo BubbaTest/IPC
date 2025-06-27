@@ -70,7 +70,7 @@ async function cargarSelect(storeName, selectElement, keyField, displayField, so
 }
 
 // Función para filtrar muestras
-async function filtrarMuestras(informanteId, variedadId) {
+async function filtrarMuestras(informanteId, variedadId, semanaId) {
     try {
         const db = await IniciarBaseDatos();
         const transaction = db.transaction('Muestra', 'readonly');
@@ -98,7 +98,8 @@ async function filtrarMuestras(informanteId, variedadId) {
                 // Aplicar filtros si se proporcionan valores
                 const coincideInformante = !informanteId || muestra.InformanteId === informanteId;
                 const coincideVariedad = !variedadId || muestra.VariedadId === variedadId;
-                if (coincideInformante && coincideVariedad) {
+                const coincideSemana = !semanaId || muestra.Semana === Number.parseInt(semanaId);
+                if (coincideInformante && coincideVariedad && coincideSemana) {
                     resultados.push(muestra);
                     sMuestra = muestra;  
                     $("#analista").text(sMuestra.ObservacionAnalista);  
@@ -224,7 +225,12 @@ async function filterAndPopulateInformantes() {
         req.onsuccess = (event) => {
             const cursor = event.target.result;
             if (cursor) {
-                informantes.push(cursor.value);
+                //informantes.push(cursor.value);
+                const informante = cursor.value;
+                // Filtrar informantes que coincidan con la semanaKey
+                if (informante.Semana === semanaKey) {
+                    informantes.push(informante);
+                }
                 cursor.continue();
             } else {
                 resolve(informantes);
@@ -239,6 +245,8 @@ async function filterAndPopulateInformantes() {
     const filteredInformantes = allInformantes.filter(informante =>
         informanteIds.includes(informante.CodInformante)
     );
+
+    
 
     // limpiar el select
     informantesSelect.innerHTML = '<option value="" disabled selected>Seleccione Informante</option>';
@@ -285,7 +293,8 @@ function limpiarVariedadDetalle(obj) {
     }    
     $('#estadoSelect').select2("val", "ca");
     $('#cantidadInput').val("0");
-    $('#precioInput').val("0");    
+    $('#precioInput').val("0");
+    $('#tipomonedaSelect').prop("disabled", false);     
     $('#tipomonedaSelect').select2("val", "ca");
     $('#pesoInput').prop("disabled", true); 
     $('#pesoInput').val("0");
@@ -305,6 +314,7 @@ function limpiarVariedadDetalle(obj) {
     //$('#propinano').prop('checked', true);
     $(".schk").prop("disabled", true);
     $('#observacionesInput').val("");
+    $("#guardarBtn").prop("disabled", false );
 }
 
 // Función para insertar un nuevo registro en SeriesPrecios
@@ -318,7 +328,7 @@ async function insertarSeriePrecio() {
         const resultadoSelect = document.getElementById('resultadoSelect');
         const estadoSelect = document.getElementById('estadoSelect');
         const fechaaInput = sMuestra.Fecha;
-        const precioaInput = sMuestra.PrecioRecolectadoAnt;
+        //const precioaInput = sMuestra.PrecioRecolectadoAnt;
         const espesableInput = sMuestra.EsPesable;
         const anioInput = document.getElementById('anio');
         const mesInput = document.getElementById('mes');
@@ -340,7 +350,7 @@ async function insertarSeriePrecio() {
         }       
 
         // Obtener valores limpios y validar tipos      
-        var peso;  
+        var peso;  var preciosustituido;
         const semana = validarNumero(semanaSelect.value, 'Semana', true);
         const dia = validarCampoTexto(diasSelect.value);
         const informanteId = validarCampoTexto(informanteSelect.value, 'Informante');
@@ -349,18 +359,23 @@ async function insertarSeriePrecio() {
         const resultado = validarNumero(resultadoSelect?.value, 'Resultado', true);
         const estado = validarNumero(estadoSelect?.value, 'Estado', true);
         const fechaa = fechaaInput;
-        const precioa = Number.parseFloat(precioaInput);
+        //const precioa = Number.parseFloat(precioaInput);
         const espesable = espesableInput;
         const anio = Number.parseInt(anioInput.value, 10);
         const mes = Number.parseInt(mesInput.value, 10);
         const muestraid = validarCampoTexto(muestraidInput, 'muestraid');        
-        const cantidad = validarNumero(cantidadInput?.value, 'Cantidad', true);
-        const precio = validarNumero(precioInput?.value, 'Precio', true);
+        const cantidad = validarNumero(cantidadInput?.value, 'Cantidad', true, Number.parseInt(estado));        
+        const precio = validarNumero(precioInput?.value, 'Precio', true, Number.parseInt(estado));
         const undm = validarCampoTexto(undmSelect?.value, 'Unidad de medida');
         const tipomoneda = validarNumero(tipomonedaSelect?.value, 'Tipo de moneda', true);
         if (estado === 4) { peso = validarNumero(pesoInput?.value, 'Peso', false); }
-        else { peso = null }        
-        const preciosustituido = validarNumero(preciosustituidoInput?.value, 'Precio sustituido', false);
+        else { peso = null }  
+        if (estado === 2) {
+            preciosustituido = validarNumero(preciosustituidoInput?.value, 'Precio sustituido', true, 4);
+        }
+        else {
+            preciosustituido = validarNumero(preciosustituidoInput?.value, 'Precio sustituido', false);
+        }
         const nveces = validarNumero(nvecesInput?.value, 'Número de veces', false);
         const porcentajedescuento = validarNumero(porcentajedescuentoInput?.value, 'Porcentaje de descuento', false);
         const observaciones = observacionesInput?.value.trim() || '';
@@ -393,7 +408,23 @@ async function insertarSeriePrecio() {
         if (estadoSelect.value == 4) {
             if (checkboxesdescuento.length === 0 || !checkboxesdescuento.some(cb => $(cb).prop('checked'))) {
                 throw new Error("Debe seleccionar al menos una opción para 'Descuento' cuando el estado es Ninguno.");
-            }
+            } else {
+                // Filtrar los checkboxes marcados
+                const checkedValues = checkboxesdescuento
+                    .filter(cb => $(cb).prop('checked'))
+                    .map(cb => $(cb).val()); // Obtener el valor de cada checkbox marcado
+
+                // Validar el porcentaje de descuento solo si no está marcado el checkbox "No tiene descuento"
+                if (checkedValues[0] === "true") {
+                    const v = validarNumero(porcentajedescuentoInput?.value, 'Porcentaje de descuento', false, 4);
+                    if (v == 0 ) {
+                        throw new Error("El porcentaje de descuento no puede ser 0 cuando tiene descuento.");
+                    }
+                    else if (porcentajedescuentoInput.value < 1 || porcentajedescuentoInput.value > 100) {
+                        throw new Error("El porcentaje de descuento debe estar entre 1 y 100 tiene descuento.");
+                    }
+                }                
+            }            
         }
 
         const ivaCheck = $("#ivachk input[type='checkbox']");
@@ -455,7 +486,7 @@ async function insertarSeriePrecio() {
             Semana: semana,
             Fecha: fechaa,
             PrecioRecolectado: precio,
-            PrecioAnterior: precioa,
+            //PrecioAnterior: precioa,
             EsPesable: espesable, // no
             Peso: peso,
             Cantidad: cantidad,
@@ -491,16 +522,22 @@ async function insertarSeriePrecio() {
         request.onsuccess = () => {
             console.log('Registro insertado/actualizado:', seriePrecio);
             mostrarMensaje('Registro guardado exitosamente', 'success');
-            alertify.set('notifier','position', 'bottom-center');
-            alertify.success('Registro guardado exitosamente');
+            let delay = alertify.get('notifier','delay');
+                alertify.set('notifier','delay', 2);  
+                alertify.set('notifier','position', 'bottom-center');
+                alertify.success('Registros guardados exitosamente');
+                alertify.set('notifier','delay', delay);
         };
 
         // Manejar errores
         transaction.onerror = (event) => {
             console.error('Error en transacción:', event.target.error);
             mostrarMensaje(`Error al guardar: ${event.target.error.message}`, 'danger');
-            alertify.set('notifier','position', 'bottom-center');
-            alertify.error(`Error al guardar: ${event.target.error.message}`);
+            let delay = alertify.get('notifier','delay');
+                alertify.set('notifier','delay', 2);  
+                alertify.set('notifier','position', 'bottom-center');
+                alertify.error(`Error al guardar: ${event.target.error.message}`);
+                alertify.set('notifier','delay', delay);
         };
 
         // Completar transacción
@@ -518,6 +555,11 @@ async function insertarSeriePrecio() {
     } catch (error) {
         console.error('Error en insertarSeriePrecio:', error);
         mostrarMensaje(`Error: ${error.message}`, 'danger');
+        let delay = alertify.get('notifier','delay');
+            alertify.set('notifier','delay', 2);  
+            alertify.set('notifier','position', 'bottom-center');
+            alertify.error(`Error al guardar: ${error.message}`);
+            alertify.set('notifier','delay', delay);
         return {
             success: false,
             message: error.message
@@ -525,6 +567,7 @@ async function insertarSeriePrecio() {
     }
 }
 
+// Función para insertar un arreglo de registros en SeriesPrecios que no se realizo
 async function InsertarRegistroNoRealizado() {
     try {
         // Paso 1: Abrir base de datos
@@ -609,7 +652,7 @@ async function InsertarRegistroNoRealizado() {
                 Semana: semana,
                 Fecha: registro.Fecha,
                 PrecioRecolectado: precio,
-                PrecioAnterior: Number.parseFloat(registro.PrecioRecolectadoAnt),
+                //PrecioAnterior: Number.parseFloat(registro.PrecioRecolectadoAnt),
                 EsPesable: Boolean(registro.EsPesable),
                 Peso: peso,
                 Cantidad: cantidad,
@@ -648,8 +691,13 @@ async function InsertarRegistroNoRealizado() {
         });
 
         mostrarMensaje('Registros guardados exitosamente', 'success');
-        alertify.set('notifier','position', 'bottom-center');
-        alertify.success('Registros guardados exitosamente');
+        let delay = alertify.get('notifier','delay');
+            alertify.set('notifier','delay', 2);  
+            alertify.set('notifier','position', 'bottom-center');
+            alertify.success('Registros guardados exitosamente');
+            alertify.set('notifier','delay', delay);
+        // alertify.set('notifier','position', 'bottom-center');
+        // alertify.success('Registros guardados exitosamente');
         return {
             success: true,
             message: `Se insertaron ${variedadesUnicas.length} registros.`,
@@ -658,8 +706,11 @@ async function InsertarRegistroNoRealizado() {
     } catch (error) {
         console.error('Error en InsertarRegistroNoRealizado:', error);
         mostrarMensaje(`Error: ${error.message}`, 'danger');
-        alertify.set('notifier','position', 'bottom-center');
-        alertify.error(`Error: ${error.message}`);
+        let delay = alertify.get('notifier','delay');
+            alertify.set('notifier','delay', 2);  
+            alertify.set('notifier','position', 'bottom-center');
+            alertify.error(`Error: ${error.message}`);
+            alertify.set('notifier','delay', delay);
         return {
             success: false,
             message: error.message
@@ -675,7 +726,39 @@ function validarCampoTexto(valor, nombreCampo) {
     return valorLimpio;
 }
 
-function validarNumero(valor, nombreCampo, esRequerido = false) {
+function validarNumero(valor, nombreCampo, esRequerido = false, estado = 0) {
+    // Verificar si el valor es una cadena vacía
+    if (esRequerido && (!valor || valor.trim() === '')) {
+        throw new Error(`${nombreCampo} es obligatorio y debe ser un número ${estado === 4 ? 'mayor que 0' : 'positivo'}`);
+    }
+    
+    const valorNumerico = Number(valor?.trim());
+    
+    // Validar si el valor no es un número
+    if (Number.isNaN(valorNumerico)) {
+        if (esRequerido) {
+            throw new Error(`${nombreCampo} es obligatorio y debe ser un número ${estado === 4 ? 'mayor que 0' : 'positivo'}`);
+        }
+        return 0; // Valor por defecto para campos no requeridos
+    }
+    
+    // Validar según el estado
+    if (estado === 4 && valorNumerico <= 0) {
+        if (esRequerido) {
+            throw new Error(`${nombreCampo} debe ser mayor que 0`);
+        }
+        return 0; // Valor por defecto para campos no requeridos
+    } else if (estado !== 4 && valorNumerico < 0) {
+        if (esRequerido) {
+            throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
+        }
+        return 0; // Valor por defecto para campos no requeridos
+    }
+    
+    return valorNumerico;
+}
+
+function validarNumero2(valor, nombreCampo, esRequerido = false) {
     // Verificar si el valor es una cadena vacía
     if (esRequerido && (!valor || valor.trim() === '')) {
         throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
@@ -774,7 +857,65 @@ function limpiarFormulario() {
     mostrarMensaje('Formulario limpiado para nuevo registro', 'info');
 }
 
-async function cargarSeriePrecio(informanteId, variedadId) {
+async function cargarSeriePrecio(informanteId, variedadId, semana) {
+    try {
+        // Validar que los parámetros sean válidos
+        if (!informanteId || !variedadId || !semana) {
+            throw new Error('Informante, Variedad y Semana son requeridos');
+        }
+
+        // Limpiar espacios en los valores
+        const cleanInformante = informanteId.trim();
+        const cleanVariedad = variedadId.trim();
+        const cleanSemana = Number.parseInt(semana);
+
+        // Abrir la base de datos
+        const db = await IniciarBaseDatos();
+        const transaction = db.transaction('SeriesPrecios', 'readonly');
+        const store = transaction.objectStore('SeriesPrecios');
+
+         // Verificar si existe el índice necesario
+        if (!store.indexNames.contains('BuscarxInfVarSem')) {
+            throw new Error('Índice BuscarxInfVarSem no encontrado');
+        }
+       
+        // Usar índice y rango de clave para búsqueda directa
+        const index = store.index('BuscarxInfVarSem');
+        const keyRange = IDBKeyRange.only([cleanInformante, cleanVariedad, cleanSemana]);
+        const cursorRequest = index.openCursor(keyRange);
+
+        const resultados = [];
+    
+        cursorRequest.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                // Agregar el registro encontrado
+                resultados.push(cursor.value);
+                cursor.continue();
+            } else {
+                // Procesar resultados
+                if (resultados.length > 0) {
+                    rellenarFormulario(resultados[0]); 
+                } else {
+                    // No hay registros
+                    limpiarVariedadDetalle("editar");
+                    mostrarMensaje("No se ha ingresado Serie Precio", "warning");
+                }
+            }
+        };
+
+        cursorRequest.onerror = (event) => {
+            console.error('Error al buscar en SeriesPrecios:', event.target.error);
+            mostrarMensaje(`Error al buscar serie de precio: ${event.target.error.message}`, "danger");
+        };
+
+    } catch (error) {
+        console.error('Error en cargarSeriePrecio:', error);
+        mostrarMensaje(`Error al procesar los datos: ${error.message}`, "danger");
+    }
+}
+
+async function cargarSeriePrecio2(informanteId, variedadId) {
     try {
         // Validar que los parámetros sean válidos
         if (!informanteId || !variedadId) {
@@ -865,6 +1006,7 @@ function setEstadoProductoCheckboxes(registro) {
     $("#porcentajedescuentoInput").val(registro.Descuento);
     setCheckboxState("ivasi", "ivano", registro.TieneIva);
     setCheckboxState("propinasi", "propinano", registro.TienePropina);
+    $(".schk").prop("disabled", false);
 }
 
 // funcion para mostrar el detalle del informante
@@ -882,17 +1024,19 @@ const db = await openDB();
     req.onsuccess = () => {
       const registro = req.result;
       if (registro) {
-        // Llenar los inputs con los datos del registro
-        document.getElementById('direccionInput').value = registro.Direccion || '';
+        // Llenar los inputs con los datos del registro        
         document.getElementById('regionInput').value = registro.Region || '';
+        document.getElementById('barrioInput').value = registro.Barrio || '';
+        document.getElementById('direccionInput').value = registro.Direccion || '';
         document.getElementById('cvariedadesInput').value = registro.Cantidad || '';
 
         resolve(registro);
       } else {
-        console.warn('No se encontró ningún registro con la clave:', key);
+        // console.warn('No se encontró ningún registro con la clave:', key);
         // Limpiar los campos si no hay resultado
-        document.getElementById('direccionInput').value = '';
         document.getElementById('regionInput').value = '';
+        document.getElementById('barrioInput').value = '';
+        document.getElementById('direccionInput').value = '';        
         document.getElementById('cvariedadesInput').value = '';
         resolve(null); // Resolvemos con null si no se encuentra
       }
@@ -1166,8 +1310,46 @@ async function marcarInformantesConDatosHoy() {
     };
 }
 
+async function marcarVariedadesConDatos() {
+    const db = await openDB();
+    const informantesSelect = $('#informantesSelect').val(); // Usamos jQuery para select2
+    let semanaSelect = $('#semanasSelect').val();
+    semanaSelect = Number.parseInt(semanaSelect);
+    const variedadesSelect = $('#variedadesSelect')
+
+    const variedadesHoy = new Set();
+
+    const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+    const almacenSeries = transaction.objectStore('SeriesPrecios');
+    const index = almacenSeries.index('BuscarxInfSem');
+    const Rango = IDBKeyRange.bound([informantesSelect, semanaSelect], [informantesSelect, semanaSelect]);
+
+    const cursorRequest = index.openCursor(Rango);
+
+    cursorRequest.onsuccess = function(event) {
+        const cursor = event.target.result;
+        if (cursor) {
+            const registro = cursor.value;
+            const variedadId = registro.VariedadId;
+
+            if (variedadId !== undefined) {
+                variedadesHoy.add(variedadId);
+            }
+
+            cursor.continue(); // Continuar al siguiente
+        } else {
+            // cursor terminando => inicializar select2 con plantilla personalizada
+            inicializarSelect2ConMarcacion(variedadesSelect, variedadesHoy);
+        }
+    };
+
+    cursorRequest.onerror = function(event) {
+        console.error("Error al leer los datos de SeriesPrecios:", event.target.error);
+    };
+}
+
 // Función que inicializa select2 con templateResult para marcar opciones
-function inicializarSelect2ConMarcacion(selectElement, informantesHoySet) {
+function inicializarSelect2ConMarcacion(selectElement, itemHoySet) {
     // Destruir instancia previa si existe (para reinicializar)
     if (selectElement.hasClass('select2-hidden-accessible')) {
         selectElement.select2('destroy');
@@ -1181,9 +1363,9 @@ function inicializarSelect2ConMarcacion(selectElement, informantesHoySet) {
             }
             // Crear contenedor jQuery para aplicar estilos
             const $option = $('<span></span>').text(option.text);
-            if (informantesHoySet.has(option.id)) {
+            if (itemHoySet.has(option.id)) {
                 $option.addClass('informante-datos-hoy');
-                $option.attr('title', 'Este informante tiene datos hoy');
+                $option.attr('title', 'Este item tiene datos');
             }
             return $option;
         },
@@ -1193,8 +1375,8 @@ function inicializarSelect2ConMarcacion(selectElement, informantesHoySet) {
                 return option.text;
             }
             let $selection = $('<span></span>').text(option.text);
-            if (informantesHoySet.has(option.id)) {
-                $selection.attr('title', 'Este informante tiene datos hoy');
+            if (itemHoySet.has(option.id)) {
+                $selection.attr('title', 'Este item tiene datos');
             }
             return $selection;
         },
@@ -1218,14 +1400,13 @@ function actualizarSelect2(selectElement, informantesHoy) {
 async function enviarDatos(obj) {
     try {
         const response = await jsonSeriesPrecios(obj);
-        const registrosNoEnviados = response.SeriesPrecios_; // Extraemos los registros no enviados
+        const registrosNoEnviados = response.SeriesPrecios; // Extraemos los registros no enviados
         if (registrosNoEnviados.length === 0) {           
             mostrarMensaje("No hay registros pendientes por enviar", "success");
             return;
         }
 
         const jsonData = JSON.stringify(response); // Convertir a JSON
-        //console.error("Datos a enviar:", jsonData);
 
         const messageDiv = document.getElementById('message');
         messageDiv.classList.add('d-none'); // Ocultar mensaje anterior
@@ -1282,7 +1463,7 @@ async function jsonSeriesPrecios(obj) {
                 });
 
                 // Mapeo de SeriesPrecios_
-                const SeriesPrecios_ = registrosNoEnviados.map(item => ({
+                const SeriesPrecios = registrosNoEnviados.map(item => ({
                     InformanteId: item.InformanteId,
                     VariedadId: item.VariedadId,
                     Anio: item.Anio,
@@ -1328,7 +1509,8 @@ async function jsonSeriesPrecios(obj) {
                             DistritoId: "",
                             Activo: true,
                             CoordenadaX: item.CoordenadaX,
-                            CoordenadaY: item.CoordenadaY
+                            CoordenadaY: item.CoordenadaY,
+                            IdEmpleado: item.CreadoPor
                         });
                     }
                 });
@@ -1337,7 +1519,7 @@ async function jsonSeriesPrecios(obj) {
 
                 // Resolución del resultado
                 resolve({
-                    SeriesPrecios_: SeriesPrecios_,
+                    SeriesPrecios: SeriesPrecios,
                     Muestras: Muestras,
                     Informantes: Informantes
                 });
@@ -1625,7 +1807,7 @@ async function obtenerValidaMuestra(empleado) {
                 const li = document.createElement("li");
                 li.className = "list-group-item d-flex justify-content-between align-items-center";
                 li.innerHTML = `
-                    <span><strong>${item.nombreInformante}</strong></span>
+                    <span><strong>${item.nombreInformante} / Semana ${item.semana}</strong></span>
                     <button class="btn btn-sm btn-primary" onclick="irMuestra(${item.semana}, '${item.diaSemanaId}', '${item.codInformante.trim()}')">
                         Ver
                     </button>                    
@@ -1676,7 +1858,6 @@ async function mostrarPesableFaltante() {
 
     // 1. Obtener todos los registros válidos de SeriesPrecios
     const records = await getValidSeriesRecords(db);
-
     if (!records.length) {
       // Mostrar modal sin resultados
       mostrarModal([]);
@@ -1696,7 +1877,7 @@ async function mostrarPesableFaltante() {
       const dia = record.Dia;
 
       const [informante, variedad] = await Promise.all([
-        getInformante(db, informanteId),
+        getInformante(db, informanteId, semana),
         getVariedad(db, variedadId, informanteId)
       ]);
 
@@ -1765,14 +1946,33 @@ function getValidSeriesRecords(db) {
   });
 }
 
-function getInformante(db, informanteId) {
+function getInformante2(db, informanteId) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('Informantes', 'readonly');
     const store = tx.objectStore('Informantes');
-    const req = store.get(informanteId);
+    const index = store.index('BuscarInformante');
+    const req = index.getAll(String(informanteId)); // Obtener todos los registros que coincidan
 
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  });
+}
+
+function getInformante(db, informanteId, semana) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('Informantes', 'readonly');
+    const store = tx.objectStore('Informantes');
+    
+    // Crear el array clave según el keyPath definido ['CodInformante', 'Semana']
+    const key = [String(informanteId), Number.parseInt(semana)];
+    const req = store.get(key);
+    req.onsuccess = () => {
+      resolve(req.result);
+    };
+    
+    req.onerror = () => {
+      reject(req.error);
+    };
   });
 }
 
@@ -1879,7 +2079,23 @@ function irMuestra(semana, diaSemanaId, codInformante) {
 function setupListarMuestraEventListeners() {
     // Manejador de evento para el botón de filtrar
     document.getElementById('filtrarBtn').addEventListener('click', () => {
-        document.getElementById('variedadDetalle').style.display = 'block';
+        const estadoId = $("#resultadoSelect").val();
+        if (estadoId==1) {  
+            document.getElementById('variedadDetalle').style.display = 'block'; 
+            marcarVariedadesConDatos();
+        }
+        else {
+            $("#filtrarBtn").prop("disabled", true);
+            InsertarRegistroNoRealizado()
+            .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.                
+                return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
+            })
+            .catch(error => {
+                console.error("Ocurrió un error en la cadena de promesas:", error);
+                // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
+                // throw error;        
+            });
+        }
     });                        
 
     document.getElementById('limpiarBtn').addEventListener('click', () => {
@@ -1890,12 +2106,13 @@ function setupListarMuestraEventListeners() {
         insertarSeriePrecio()
         .then(resultado => {
             if (!resultado.success) {
-                marcarInformantesConDatosHoy();
                 mostrarMensaje(`Error: ${resultado.message}`, 'error');
             } 
             else {
                 // Limpiar formulario después de guardar
                 limpiarVariedadDetalle("nuevo");
+                marcarInformantesConDatosHoy();
+                marcarVariedadesConDatos();
             }
         })
         .catch(error => {
@@ -1941,7 +2158,9 @@ function setupListarMuestraEventListeners() {
             });
             mostrarDiferencias(informanteId, semana.value);                            
             $('#resultadoSelect').select2("val", "ca");
-            $("#resultadoSelect").prop("disabled", false);                               
+            $("#resultadoSelect").prop("disabled", false);
+            $("#filtrarBtn").prop("disabled", true );
+            $("#guardarBtn").prop("disabled", false );                               
             variedadDetalle.style.display = 'none';
             limpiarVariedadDetalle("nuevo");
 
@@ -1962,8 +2181,8 @@ function setupListarMuestraEventListeners() {
     
     // ✅ Alternativa usando evento de Select2
     $('#resultadoSelect').on('select2:select', function (e) {                              
-        const estadoId = $(this).val();
-        if (estadoId==1) {
+        //const estadoId = $(this).val();
+        //if (estadoId==1) {
             const informanteId = $("#informantesSelect").val().trim();
             const variedadesSelect = document.getElementById('variedadesSelect');  
             
@@ -1985,22 +2204,25 @@ function setupListarMuestraEventListeners() {
                 variedadesSelect.innerHTML = '<option value="">No hay variedades para este informante</option>';
             }
                 $("#filtrarBtn").prop("disabled", false);
-        } else {
-            $("#filtrarBtn").prop("disabled", true);
-            InsertarRegistroNoRealizado()
-            .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.
-                return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
-            })
-            .catch(error => {
-                console.error("Ocurrió un error en la cadena de promesas:", error);
-                // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
-                // throw error;        
-            });
-        }                            
+        // } 
+        // else {
+        //     $("#filtrarBtn").prop("disabled", true);
+        //     InsertarRegistroNoRealizado()
+        //     .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.
+        //         return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
+        //     })
+        //     .catch(error => {
+        //         console.error("Ocurrió un error en la cadena de promesas:", error);
+        //         // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
+        //         // throw error;        
+        //     });
+        // }                            
     });
+
     $('#variedadesSelect').on('select2:select', async function (e) { 
         const informanteId = document.getElementById('informantesSelect').value;                            
         const variedadId = $(this).val();
+        const semanaId = document.getElementById('semanasSelect').value;
         const undmSelect = document.getElementById('undmSelect');  
 
         // Validar al menos un filtro seleccionado
@@ -2010,7 +2232,7 @@ function setupListarMuestraEventListeners() {
         }                            
         
         // Llamar a la función para filtrar muestras
-        filtrarMuestras(informanteId, variedadId);
+        filtrarMuestras(informanteId, variedadId, semanaId);
 
         undmSelect.disabled = false;                          
     
@@ -2024,7 +2246,7 @@ function setupListarMuestraEventListeners() {
             undmSelect.innerHTML = '<option value="">No hay unidades para esta variedad</option>';
         } else {
             // Cargar serie de precios
-            await  cargarSeriePrecio(informanteId, variedadId);
+            await  cargarSeriePrecio(informanteId, variedadId, semanaId);
         }  
     });
 
@@ -2040,6 +2262,7 @@ function setupListarMuestraEventListeners() {
             $("#precioInput").val(0)
             $("#precioInput").prop("disabled", true);
             $('#pesoInput').prop("disabled", true);
+             $('#tipomonedaSelect').prop("disabled", true);            
             if (estadoId== 2) {
                 $('#preciosustituidoInput').prop("disabled", false);  
             } else { $('#preciosustituidoInput').prop("disabled", true); }                                
@@ -2050,6 +2273,7 @@ function setupListarMuestraEventListeners() {
             $("#cantidadInput").prop("disabled", false);
             $("#precioInput").val(0);  
             $("#precioInput").prop("disabled", false);
+            $('#tipomonedaSelect').prop("disabled", false);
             if (pesablees) {
                     $('#pesoInput').prop("disabled", false);  
             } else { $('#pesoInput').prop("disabled", true); }  
@@ -2233,7 +2457,8 @@ async function actualizarMuestra(id) {
                 detalleDiv.innerHTML = '';
                 const informanteId = document.getElementById('informantesSelect').value;
                 const variedadId = document.getElementById('variedadesSelect').value;
-                filtrarMuestras(informanteId, variedadId);
+                const semanaId = document.getElementById('semanaSelect').value;
+                filtrarMuestras(informanteId, variedadId, semanaId);
             };
             
             putRequest.onerror = () => {
@@ -2666,7 +2891,7 @@ async function cargarSelect1(storeName, selectElement, keyField, displayField, s
     }
 }
 
-async function cargarSeriePrecio2(informanteId, variedadId) {
+async function cargarSeriePrecio3(informanteId, variedadId) {
     try {
         // Validar que los parámetros sean válidos
         if (!informanteId || !variedadId) {

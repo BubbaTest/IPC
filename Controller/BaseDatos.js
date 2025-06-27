@@ -6,7 +6,7 @@ async function IniciarBaseDatos() {
         const solicitud = indexedDB.open('IPC', 1); // El segundo parámetro es la versión de la base de datos
 
         solicitud.addEventListener('error', (event) => {
-            console.error('Error al abrir la base de datos:', evento.target.error);
+            console.error('Error al abrir la base de datos:', event.target.error);
             reject(event.target.error);
         });
 
@@ -43,7 +43,7 @@ function CrearAlmacen(evento) {
             const store = transaction.objectStore('Users');
     
             // Agregar el usuario admin con una contraseña por defecto
-            store.add({ UsuarioId: 'admin', password: '9175E455384B20A983DDAB1408E35E3F3789B794' }); 
+            store.add({ UsuarioId: 'administrador', password: '9175E455384B20A983DDAB1408E35E3F3789B794' }); 
             store.add({ UsuarioId: 'Autoriza', password: '2FF731A2CCA6918F55903702391A2D1A1AF6CF51' });
       }
   }
@@ -73,6 +73,8 @@ function CrearAlmacen(evento) {
             keyPath: ['InformanteId', 'VariedadId', 'Fecha'] 
             });
         almacenSeriePrecio.createIndex('BuscarPorInformanteYVariedad', ['InformanteId', 'VariedadId'], { unique: false });
+        almacenSeriePrecio.createIndex('BuscarxInfVarSem', ['InformanteId', 'VariedadId', 'Semana'], { unique: false });
+        almacenSeriePrecio.createIndex('BuscarxInfSem', ['InformanteId', 'Semana'], { unique: false });
         almacenSeriePrecio.createIndex('BuscarPorInformanteYFecha', ['InformanteId', 'Fecha'], { unique: false });
         almacenSeriePrecio.createIndex('BuscarPorFechaCreacion', 'FechaCreacion');
     }
@@ -119,7 +121,27 @@ function CrearAlmacen(evento) {
             //idUnico: `${variedad.id}-${variedad.informanteId.trim()}`,
             //keyPath: 'idUnico'
         });
+        almacenInformanteDetalle.createIndex('BuscaxInformante', 'CodInformante', { unique: false });
     }
+}
+
+// Función para agregar un usuario
+async function agregarUsuario(usuarioId, password) {
+    const db = await IniciarBaseDatos();
+    const transaction = db.transaction(['Users'], 'readwrite');
+    const store = transaction.objectStore('Users');
+    const usuario = { UsuarioId: usuarioId, password: password };
+    return new Promise((resolve, reject) => {
+        const request = store.add(usuario);
+        request.onsuccess = () => {
+            resolve();
+            return { success: true, message: 'Usuario creado correctamente.' };
+        };
+        request.onerror = (event) => {
+            reject('Error al agregar el usuario:', event.target.error);
+            return { success: false, message: event.target.error };
+        };
+    });
 }
 
 async function validarLogin(usuarioId, password) {
@@ -213,6 +235,53 @@ async function obtenerAlmacenarUsuarios(empleado) {
         console.error('Error al Obtener y Almacenar Usuarios:', error);
         return { success: false, message: error.message };
     }
+}
+
+async function obtenerConnecter(empleado) {
+    try { 
+            const url = 'https://localhost:7062/endpoint/cuentas/Connecter?utilisatrice=Administrador&passe=A5CD3BCFC12643684DA33DE721DDEA2AEDF0FDB6';
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'Authorization': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJVVElMSVNBVFJJQ0UiOiJBZG1pbmlzdHJhZG9yIiwiZXhwIjoxNzUwMzk4MDMxfQ.TPO2pktexM9gyLJk5QEL3JmLYvAC7yIhuFjeZh-oFUk'
+            },
+            mode: 'cors'
+        });
+
+        if (!response.ok) {
+            const errorResponse = await response.json();
+            const errorMessage = errorResponse.mensaje || `Error en la solicitud HTTP: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+
+        const user = await response.json();
+        console.error(user)
+
+        return { success: true, message: 'Usuarios importados y almacenados correctamente.' };
+    } catch (error) {
+        console.error('Error al Obtener y Almacenar Usuarios:', error);
+        return { success: false, message: error.message };
+    }
+    
+
+    // .then(response => {
+       
+    //     if (!response.ok) {
+    //          console.error(response)
+    //         throw new Error(`HTTP error! status: ${response.status}`);
+    //     }
+    //     return response.json(); // o response.text() si esperas texto plano, o response.blob(), etc.
+    // })
+    // .then(data => {
+    //     console.error(data)
+    //     console.log('Respuesta:', data);
+    //     return { success: true, message: 'Usuarios importados y almacenados correctamente.' };
+    // })
+    // .catch(error => {
+    //     console.error('Error:', error);
+    // });
 }
 
 async function obtenerPermisoAlmacenar2(empleado, usuario, clave) {
@@ -330,7 +399,7 @@ async function obtenerPermisoAlmacenar(empleado, usuario, clave) {
         });
 
         for (const key of existingUsers) {
-            if (key !== 'admin' && key !== 'Autoriza') {
+            if (key !== 'administrador' && key !== 'Autoriza') {
                 await store.delete(key);
             }
         }
@@ -365,7 +434,6 @@ async function obtenerAlmacenarCatalogos(empleado) {
         }
 
         const catalog = await response.json();
-        console.error(catalog)
 
         if (!catalog || !Array.isArray(catalog.informantes) || !Array.isArray(catalog.variedades) || !Array.isArray(catalog.diasSemana) || !Array.isArray(catalog.umedP) || !Array.isArray(catalog.semana) || !Array.isArray(catalog.informanteDto)) {
             throw new Error('Formato de respuesta inválido');
@@ -446,6 +514,7 @@ async function obtenerAlmacenarCatalogos(empleado) {
                 CodInformante: informante.codInformante.trim(),
                 Semana: Number.parseInt(informante.semana),
                 Direccion: informante.direccion.trim(),
+                Barrio: informante.barrio.trim(),
                 Region: informante.nomRegionDistrito.trim(),
                 Cantidad: Number.parseInt(informante.conteoProductos),
             });
