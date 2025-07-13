@@ -23,8 +23,21 @@
     </style>
 
      <!-- Fuentes -->
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat :wght@400;600&display=swap" rel="stylesheet">
-
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+    <!-- <link rel="manifest" href="/manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado con éxito:', registration);
+                    })
+                    .catch(error => {
+                        console.error('Error registrando Service Worker:', error);
+                    });
+            });
+        }
+    </script> -->
     <!-- Scripts principales -->
     <script src="Scripts/bootstrap.bundle.min.js"></script>
     <script src="Scripts/jquery-3.5.1.min.js"></script>
@@ -110,11 +123,10 @@
 
     <input type="hidden" id="hidden-usuarioId">
 
-    <script src="Controller/BaseDatos.js"></script>
+    <script async src="Controller/BaseDatos.js"></script>
 
     <script> 
         const usuarioStr = localStorage.getItem('Benutzer');
-        console.error(usuarioStr);
         if (!usuarioStr) {
             document.getElementById("mensajeModal").textContent = "Debes iniciar sesión para acceder a esta página.";
             new bootstrap.Modal(document.getElementById("modalAccesoDenegado")).show();
@@ -148,6 +160,8 @@
                             document.getElementById('pass').style.display = 'inline-block';                            
                             document.getElementById('btnAutorizar').style.display = 'inline-block';
                             document.getElementById('btnUsuario').style.display = 'none';
+                            $("#btlEliminaBase").prop("disabled", false);
+                            //exportarBaseDeDatos('IPC');
                            
                         } 
                     } 
@@ -230,14 +244,7 @@
                     $("#btnCatalogos").prop("disabled", false);
                     $("#btnMuestra").prop("disabled", false);
                     $("#btlEliminaBase").prop("disabled", false);
-
-                    //// Obtener el día actual
-                    // const today = new Date();
-                    // const day = today.getDate();
-                    // // Habilitar botones solo si el día es 1 o 15
-                    // if (day === 1 || day === 15) {
-                    //     $("#btlEliminaBase").prop("disabled", false);
-                    // }
+                  
                 } else {
                     mostrarMensaje(`Error al importar usuarios: ${result.message}`, "error");                    
                 }
@@ -317,7 +324,6 @@
 
         async function EliminarBase() {
             // Mostrar el modal de confirmación
-            //$('#modalConfirmacion').modal('show');
             new bootstrap.Modal(document.getElementById("modalConfirmacion")).show();
 
             // Agregar evento al botón de eliminar

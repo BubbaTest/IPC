@@ -5,7 +5,11 @@
       font-weight: bold; /* Hace el texto en negrita */
   }
 </style>
+
 <div class="container mt-5 text-center">
+  <div id="spinner" class="spinner-border text-primary" role="status" style="display: none;">
+    <span class="visually-hidden">Cargando...</span>
+  </div>
   <p id="analista">Debe tener conexión para realizar esta acción.</p>
   <button type="button" class="btn btn-primary" data-tabcontinuar="data-tabcontinuar" onclick="enviarDatos(true)">
       <span>Enviar  Pesables</span>

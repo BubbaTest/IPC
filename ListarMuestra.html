@@ -22,12 +22,6 @@
       margin-top: 20px;
   }
 
-  /*table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 1000px;  Para forzar scroll horizontal si hay pocos datos 
-  } */
-
   th, td {
       padding: 12px 15px;
       border: 1px solid #ddd;
@@ -59,25 +53,7 @@
   .btn:not(.buttones):hover {
       background-color: #e67e22;
   }
-
-  
-
- /* .btn {
-      display: inline-block;
-      padding: 6px 12px;
-      font-size: 14px;
-      border-radius: 4px;
-      text-decoration: none;
-      color: #fff;
-      background-color: #2812f3;
-      border: none;
-      cursor: pointer;
-  }
-
-  .btn:hover {
-      background-color: #e67e22;
-  } */
-
+ 
   .no-data {
       text-align: center;
       padding: 20px;
@@ -99,41 +75,25 @@
       color: rgb(132, 134, 134); /* Cambia el color del texto a azul */
       font-weight: bold; /* Hace el texto en negrita */
   }
-
-  /* Diseño adaptativo para móviles 
-  @media (max-width: 768px) {
-      table {
-          border: 0;
-      }
-
-      table thead {
-          display: none;
-      }
-
-      table tr {
-          margin-bottom: 15px;
-          display: block;
-          border-bottom: 2px solid #ddd;
-      }
-
-      table td {
-          display: flex;
-          justify-content: space-between;
-          padding-left: 50%;
-          position: relative;
-          border: none;
-          border-bottom: 1px solid #ddd;
-      }
-
-      table td::before {
-          content: attr(data-label);
-          position: absolute;
-          left: 15px;
-          font-weight: bold;
-          color: #555;
-      }
-  }*/
 </style>
+
+<!-- Modal de confirmacion -->
+  <div id="modalConfirmacion" class="modal fade" tabindex="-1" aria-labelledby="exampleModalLabel">
+      <div class="modal-dialog modal-sm">
+          <div class="modal-content">
+              <div class="modal-header">
+                  <h5 class="modal-title" id="exampleModalLabel">Confirmación</h5>
+              </div>
+              <div class="modal-body">
+                  ¿Estás seguro de que no se realizara la entrevista?
+              </div>
+              <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" id="btnCancelar">Cancelar</button>
+                  <button type="button" class="btn btn-primary" id="btnConfirmar">Confirmar</button>
+              </div>
+          </div>
+      </div>
+  </div>
 
 <div class="container">
   <div class="row  justify-content-center mb-1">
@@ -302,7 +262,9 @@
     <div class="col-md-2 mt-1">
       <div class="form-group">
         <label class="has-float-label" data-toggle="tooltip" data-placement="top" title="Precio">
-          <input type="text" id="precioInput" class="form-control mask" placeholder="Precio" aria-label="Precio" value="0" required>
+          <input type="number" id="precioInput" class="form-control" placeholder=" " aria-label="Precio" value="0" step="0.01"
+           min="0" pattern="^\d+(\.\d{1,2})?$" oninput="validateDecimal(this)" required>
+          <!-- <input type="text" id="precioInput" class="form-control mask" placeholder="Precio" aria-label="Precio" value="0" required> -->
           <span>Precio:</span>
         </label>
       </div>
@@ -333,7 +295,9 @@
     <div class="col-md-2 mt-1">
       <div class="form-group">
         <label class="has-float-label" data-toggle="tooltip" data-placement="top" title="Peso">
-          <input type="text" id="pesoInput" class="form-control mask" placeholder="Peso" aria-label="Peso" value="0" disabled>
+          <input type="number" id="pesoInput" class="form-control" placeholder="Peso" aria-label="Peso" value="0" step="0.01"
+           min="0" pattern="^\d+(\.\d{1,2})?$" oninput="validateDecimal(this)" disabled>
+          <!-- <input type="text" id="pesoInput" class="form-control mask" placeholder="Peso" aria-label="Peso" value="0" disabled> -->
           <span>Peso:</span>
         </label>
       </div>
@@ -341,7 +305,9 @@
     <div class="col-md-2 mt-1">
       <div class="form-group">
         <label class="has-float-label" data-toggle="tooltip" data-placement="top" title="Precio Sustituido">
-          <input type="text" id="preciosustituidoInput" class="form-control mask" placeholder="Precio Sustituido" aria-label="Precio Sustituido" value="0" disabled>
+          <input type="number" id="preciosustituidoInput" class="form-control" placeholder="Precio Sustituido" aria-label="Precio Sustituido" value="0" step="0.01"
+           min="0" pattern="^\d+(\.\d{1,2})?$" oninput="validateDecimal(this)" disabled>
+          <!-- <input type="text" id="preciosustituidoInput" class="form-control mask" placeholder="Precio Sustituido" aria-label="Precio Sustituido" value="0" disabled> -->
           <span>Precio Sustituido:</span>
         </label>
       </div>
@@ -451,19 +417,4 @@
       </div>
     </div>
   </div>
-  <!-- <div class="row  justify-content-center mb-2">
-    <div class="col-md-1">
-      <div class="form-group">
-        <button type="button" id="limpiarBtn" class="btn btn-secondary btn-sm">Limpiar</button>
-      </div>
-    </div>
-    <div class="col-md-1">
-      <div class="form-group">
-        <button type="button" id="guardarBtn" class="btn btn-success btn-sm">Guardar</button>
-      </div>
-    </div>
-  </div> -->
-</div>
-
-<div class="container mt-4" id="muestrasDetalle">
 </div>

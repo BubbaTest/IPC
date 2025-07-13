@@ -69,8 +69,185 @@ async function cargarSelect(storeName, selectElement, keyField, displayField, so
     }
 }
 
+async function CargarSelectFiltros2(informanteId, semana, dia, selectElement, keyField = 'id', displayField = 'descripcion') {
+    try {
+        const db = await IniciarBaseDatos();
+        const transaction = db.transaction('Variedades', 'readonly');
+        const store = transaction.objectStore('Variedades');
+
+        // Verificar si existe el índice necesario
+        if (!store.indexNames.contains('BuscarInfSemDia')) {
+            throw new Error("Índice 'BuscarInfSemDia' no encontrado en Variedades");
+        }
+
+        const index = store.index('BuscarInfSemDia');
+        const keyRange = IDBKeyRange.only([informanteId.trim(), Number.parseInt(semana), dia.toString()]);
+
+        const request = index.getAll(keyRange);
+        const items = [];
+
+        await new Promise((resolve, reject) => {
+            request.onsuccess = (event) => {
+                const results = event.target.result;
+                if (results && results.length > 0) {
+                    items.push(...results);
+                }
+                resolve();
+            };
+
+            request.onerror = (event) => {
+                reject(event.target.error);
+            };
+        });
+
+        // Ordenar alfabéticamente por displayField
+        items.sort((a, b) => {
+            const valA = a[displayField]?.trim().toLowerCase() || '';
+            const valB = b[displayField]?.trim().toLowerCase() || '';
+            return valA.localeCompare(valB);
+        });
+
+        // Limpiar select
+        selectElement.innerHTML = '<option value="" disabled selected>Seleccione una opción</option>';
+
+        // Rellenar opciones
+        if (items.length > 0) {
+            for (const item of items) {
+                const option = document.createElement('option');
+                option.value = item[keyField];
+                option.textContent = item[displayField];
+                selectElement.appendChild(option);
+            }
+        } else {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No hay datos disponibles";
+            option.disabled = true;
+            selectElement.appendChild(option);
+        }
+
+        // Trigger para Select2 o componentes dinámicos
+        $(selectElement).trigger('change');
+
+    } catch (error) {
+        console.error("Error al cargar el select:", error);
+        selectElement.innerHTML = '<option value="" disabled selected>Error al cargar datos</option>';
+        $(selectElement).trigger('change');
+    }
+}
+
+async function CargarSelectFiltros(informanteId, semana, dia, selectElement, keyField = 'id', displayField = 'descripcion') {
+    try {
+        const db = await IniciarBaseDatos();
+
+        // === 1. Leer Variedades filtradas ===
+        const txVariedades = db.transaction('Variedades', 'readonly');
+        const storeVariedades = txVariedades.objectStore('Variedades');
+
+        if (!storeVariedades.indexNames.contains('BuscarInfSemDia')) {
+            throw new Error("Índice 'BuscarInfSemDia' no encontrado en Variedades");
+        }
+
+        const indexVariedades = storeVariedades.index('BuscarInfSemDia');
+        const keyRangeVariedades = IDBKeyRange.only([informanteId.trim(), Number.parseInt(semana), dia.toString()]);
+        const requestVariedades = indexVariedades.getAll(keyRangeVariedades);
+
+        let variedadesList = [];
+
+        await new Promise((resolve, reject) => {
+            requestVariedades.onsuccess = (event) => {
+                variedadesList = event.target.result || [];
+                resolve();
+            };
+            requestVariedades.onerror = (event) => reject(event.target.error);
+        });
+
+        // === 2. Leer SeriesPrecios filtradas ===
+        const txSeriesPrecios = db.transaction('SeriesPrecios', 'readonly');
+        const storeSeriesPrecios = txSeriesPrecios.objectStore('SeriesPrecios');
+
+        if (!storeSeriesPrecios.indexNames.contains('BuscarxInfSemDia')) {
+            throw new Error("Índice 'BuscarxInfSemDia' no encontrado en SeriesPrecios");
+        }
+
+        const indexSeriesPrecios = storeSeriesPrecios.index('BuscarxInfSemDia');
+        const keyRangeSeriesPrecios = IDBKeyRange.only([informanteId.trim(), Number.parseInt(semana), dia.toString()]);
+        const requestSeriesPrecios = indexSeriesPrecios.getAll(keyRangeSeriesPrecios);
+
+        let seriesPreciosList = [];
+
+        await new Promise((resolve, reject) => {
+            requestSeriesPrecios.onsuccess = (event) => {
+                seriesPreciosList = event.target.result || [];
+                resolve();
+            };
+            requestSeriesPrecios.onerror = (event) => reject(event.target.error);
+        });
+
+        // === 3. Comparar: obtener ids de SeriesPrecios ===
+        const idsEnSeriesPrecios = new Set(seriesPreciosList.map(sp => sp.VariedadId));
+
+        // === 4. Clasificar y ordenar variedades ===
+        const sinRegistro = [];
+        const conRegistro = [];
+
+        for (const varItem of variedadesList) {
+            if (!idsEnSeriesPrecios.has(varItem.id)) {
+                sinRegistro.push(varItem);
+            } else {
+                conRegistro.push(varItem);
+            }
+        }
+
+        // Ordenar alfabéticamente
+        sinRegistro.sort((a, b) => a[displayField]?.localeCompare(b[displayField]));
+        conRegistro.sort((a, b) => a[displayField]?.localeCompare(b[displayField]));
+
+        // === 5. Limpiar y llenar el <select> ===
+        selectElement.innerHTML = '<option value="" disabled selected>Seleccione una opción</option>';
+
+        // Opciones sin registro
+        if (sinRegistro.length > 0) {
+            const optgroupSin = document.createElement('optgroup');
+            optgroupSin.label = 'Sin Registro';
+
+            sinRegistro.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item[keyField];
+                option.textContent = item[displayField];
+                optgroupSin.appendChild(option);
+            });
+
+            selectElement.appendChild(optgroupSin);
+        }
+
+        // Opciones con registro
+        if (conRegistro.length > 0) {
+            const optgroupCon = document.createElement('optgroup');
+            optgroupCon.label = 'Con Registro';
+
+            conRegistro.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item[keyField];
+                option.textContent = item[displayField];
+                optgroupCon.appendChild(option);
+            });
+
+            selectElement.appendChild(optgroupCon);
+        }
+
+        // Trigger para Select2 o componentes dinámicos
+        $(selectElement).trigger('change');
+
+    } catch (error) {
+        console.error("Error al cargar el select:", error);
+        selectElement.innerHTML = '<option value="" disabled selected>Error al cargar datos</option>';
+        $(selectElement).trigger('change');
+    }
+}
+
 // Función para filtrar muestras
-async function filtrarMuestras(informanteId, variedadId, semanaId) {
+async function filtrarMuestras(informanteId, variedadId, semanaId, diaId) {
     try {
         const db = await IniciarBaseDatos();
         const transaction = db.transaction('Muestra', 'readonly');
@@ -93,15 +270,16 @@ async function filtrarMuestras(informanteId, variedadId, semanaId) {
         request.onsuccess = (event) => {
             const cursor = event.target.result;
             if (cursor) {
-                const muestra = cursor.value; 
+                const muestra = cursor.value;                 
 
                 // Aplicar filtros si se proporcionan valores
                 const coincideInformante = !informanteId || muestra.InformanteId === informanteId;
                 const coincideVariedad = !variedadId || muestra.VariedadId === variedadId;
                 const coincideSemana = !semanaId || muestra.Semana === Number.parseInt(semanaId);
-                if (coincideInformante && coincideVariedad && coincideSemana) {
+                const coincideDia = !diaId || muestra.DiaSemanaId === diaId;
+                if (coincideInformante && coincideVariedad && coincideSemana && coincideDia) {
                     resultados.push(muestra);
-                    sMuestra = muestra;  
+                    sMuestra = muestra; 
                     $("#analista").text(sMuestra.ObservacionAnalista);  
 
                     // Crear fila de tabla
@@ -169,11 +347,9 @@ function initListarCombos() {
     }     
 }
 
-// Function para filtrar Muestra and cargar informantesSelect
 async function filterAndPopulateInformantes() {
     const db = await IniciarBaseDatos();
-    const transaction = db.transaction(['Muestra', 'Informantes'], 'readonly');
-    const muestraStore = transaction.objectStore('Muestra');
+    const transaction = db.transaction(['Informantes'], 'readonly');
     const informantesStore = transaction.objectStore('Informantes');
 
     const semanasSelect = document.getElementById('semanasSelect');
@@ -181,8 +357,8 @@ async function filterAndPopulateInformantes() {
     const informantesSelect = document.getElementById('informantesSelect');
 
     const semanaKey = Number.parseInt(semanasSelect.value, 10);
-    const diaValue = diasSelect.value; // e.g. "1"
-    
+    const diaValue = diasSelect.value;
+
     if (!semanaKey) {
         mostrarMensaje('Por favor seleccione una Semana.', "error");
         return;
@@ -192,19 +368,21 @@ async function filterAndPopulateInformantes() {
         return;
     }
 
-    // filtrar Muestra donde el campo corresponde a semanaKey  true y diaSemanaId matches diaValue
-    const filteredMuestra = [];
+    // Usar índice 'BuscarSemDia' para filtrar por Semana y Dia
+    const index = informantesStore.index('BuscarSemDia');
+    const keyRange = IDBKeyRange.only([semanaKey, diaValue]);
 
-    // Use a promise para esperar la iteracion cursor
+    const informantesUnicosMap = new Map();
+
     await new Promise((resolve, reject) => {
-        const request = muestraStore.openCursor();
+        const request = index.openCursor(keyRange);
         request.onsuccess = (event) => {
             const cursor = event.target.result;
             if (cursor) {
-                const muestra = cursor.value;
-                // if (muestra[semanaKey] === true && muestra.diaSemanaId === diaValue) {
-                if (muestra.Semana === semanaKey && muestra.DiaSemanaId === diaValue) {
-                    filteredMuestra.push(muestra);
+                const informante = cursor.value;
+                // Asegurar que CodInformante sea único
+                if (!informantesUnicosMap.has(informante.CodInformante)) {
+                    informantesUnicosMap.set(informante.CodInformante, informante);
                 }
                 cursor.continue();
             } else {
@@ -216,42 +394,12 @@ async function filterAndPopulateInformantes() {
         };
     });
 
-    // obtener unicos informanteIds de  Muestra filtrada
-    const informanteIds = [...new Set(filteredMuestra.map(m => m.InformanteId))];
-    // Fetch todos Informantes de Informantes 
-    const allInformantes = await new Promise((resolve, reject) => {
-        const informantes = [];
-        const req = informantesStore.openCursor();
-        req.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                //informantes.push(cursor.value);
-                const informante = cursor.value;
-                // Filtrar informantes que coincidan con la semanaKey
-                if (informante.Semana === semanaKey) {
-                    informantes.push(informante);
-                }
-                cursor.continue();
-            } else {
-                resolve(informantes);
-            }
-        };
-        req.onerror = (event) => {
-            reject(event.target.error);
-        };
-    });
+    const filteredInformantes = Array.from(informantesUnicosMap.values());
 
-    // filtrar Informantes que match con informanteIds
-    const filteredInformantes = allInformantes.filter(informante =>
-        informanteIds.includes(informante.CodInformante)
-    );
-
-    
-
-    // limpiar el select
+    // Limpiar select
     informantesSelect.innerHTML = '<option value="" disabled selected>Seleccione Informante</option>';
 
-    // cargar informantesSelect con informantes filtrados
+    // Cargar opciones
     if (filteredInformantes.length > 0) {
         for (const { CodInformante, NombreInformante } of filteredInformantes) {
             const option = document.createElement('option');
@@ -302,16 +450,12 @@ function limpiarVariedadDetalle(obj) {
     $('#preciosustituidoInput').val("0");
     $('#nvecesInput').prop("disabled", true); 
     $('#nvecesInput').val("0");
-    $('#ofertachk input[type=checkbox]').prop("checked", false);
-    // $('#ofertano').prop('checked', true);
-    $('#descuentochk input[type=checkbox]').prop("checked", false);
-    //$('#descuentono').prop('checked', true);
+    $('#ofertachk input[type=checkbox]').prop("checked", false);    
+    $('#descuentochk input[type=checkbox]').prop("checked", false);   
     $('#porcentajedescuentoInput').prop("disabled", true); 
     $('#porcentajedescuentoInput').val("0");
     $('#ivachk input[type=checkbox]').prop("checked", false);
-    //$('#ivano').prop('checked', true);
     $('#propinachk input[type=checkbox]').prop("checked", false);
-    //$('#propinano').prop('checked', true);
     $(".schk").prop("disabled", true);
     $('#observacionesInput').val("");
     $("#guardarBtn").prop("disabled", false );
@@ -368,8 +512,9 @@ async function insertarSeriePrecio() {
         const precio = validarNumero(precioInput?.value, 'Precio', true, Number.parseInt(estado));
         const undm = validarCampoTexto(undmSelect?.value, 'Unidad de medida');
         const tipomoneda = validarNumero(tipomonedaSelect?.value, 'Tipo de moneda', true);
-        if (estado === 4) { peso = validarNumero(pesoInput?.value, 'Peso', false); }
-        else { peso = null }  
+        // if (estado === 4) { peso = validarNumero(pesoInput?.value, 'Peso', false); }
+        // else { peso = null }  
+        peso = validarNumero(pesoInput?.value, 'Peso', false);
         if (estado === 2) {
             preciosustituido = validarNumero(preciosustituidoInput?.value, 'Precio sustituido', true, 4);
         }
@@ -575,32 +720,61 @@ async function InsertarRegistroNoRealizado() {
 
         const informanteSelect = document.getElementById('informantesSelect');
         const informanteId = validarCampoTexto(informanteSelect.value, 'Informante');
+        const semanaSelect = document.getElementById('semanasSelect');
+        const diasSelect = document.getElementById('diasSelect');
 
-        // Paso 2: Buscar todas las VariedadId asociadas al InformanteId en "Muestra"
+        const semana = Number.parseInt(semanaSelect.value);
+        const diaSemanaId = validarCampoTexto(diasSelect.value); // Cambio de nombre para claridad
+
+        // Paso 2: Buscar en "Informantes" usando la clave compuesta [CodInformante, Semana, Dia]
+        // const transactionInformantes = db.transaction("Informantes", "readonly");
+        // const storeInformantes = transactionInformantes.objectStore("Informantes");
+
+        // const keyRangeInformantes = IDBKeyRange.only([informanteId, semana, diaSemanaId]);
+        // const requestInformantes = storeInformantes.getAll(keyRangeInformantes);
+
+        // const informantesEncontrados = await new Promise((resolve, reject) => {
+        //     requestInformantes.onsuccess = () => resolve(requestInformantes.result);
+        //     requestInformantes.onerror = () => reject("Error al obtener los registros de Informantes");
+        // });
+
+        // if (informantesEncontrados.length === 0) {
+        //     throw new Error("No se encontró información para este Informante en la semana y día seleccionados.");
+        // }
+
+        // Paso 3: Usar índice 'BuscarxInfSemDia' en Muestra para buscar por InformanteId + Semana + DiaSemanaId
         const transactionMuestra = db.transaction("Muestra", "readonly");
         const storeMuestra = transactionMuestra.objectStore("Muestra");
-        const indexMuestra = storeMuestra.index("BuscarxInformante"); // Índice para filtrar por InformanteId
-        const request = indexMuestra.getAll(IDBKeyRange.only(informanteId));
+        const indexMuestra = storeMuestra.index("BuscarxInfSemDia"); // Índice compuesto
+
+        const keyRangeMuestra = IDBKeyRange.only([informanteId, semana, diaSemanaId]); // Uso del índice compuesto
+        const requestMuestra = indexMuestra.getAll(keyRangeMuestra);
 
         const registrosMuestra = await new Promise((resolve, reject) => {
-            request.onsuccess = () => resolve(
-                request.result.map(m => ({
-                    VariedadId: m.VariedadId,
-                    Fecha: m.Fecha,
-                    muestraid : m.muestraid,
-                    PrecioRecolectadoAnt: m.PrecioRecolectadoAnt,
-                    EsPesable: m.EsPesable,
-                    Nveces: m.Nveces
-                }))
-            );
-            request.onerror = () => reject("Error al obtener los registros de Muestra");
+            requestMuestra.onsuccess = () => {
+                resolve(
+                    requestMuestra.result.map(m => ({
+                        VariedadId: m.VariedadId,
+                        Fecha: m.Fecha,
+                        muestraid: m.muestraid,
+                        PrecioRecolectadoAnt: m.PrecioRecolectadoAnt,
+                        EsPesable: m.EsPesable,
+                        Nveces: m.Nveces,
+                        UnidadMedidaId: m.UnidadMedidaId,
+                        MonedaId: m.MonedaId,
+                        CantidadAnt: m.CantidadAnt,
+                        PesoAnt: m.EsPesable ? Number.parseFloat(m.PesoAnt) : null // Asignación condicional
+                    })) 
+                );
+            };
+            requestMuestra.onerror = () => reject("Error al obtener los registros de Muestra");
         });
 
         if (registrosMuestra.length === 0) {
-            throw new Error("No se encontraron registros en Muestra para este Informante.");
+            throw new Error("No se encontraron registros en Muestra para este Informante, Semana y Día.");
         }
 
-        // Eliminar duplicados basados en VariedadId (opcional según tu lógica)
+        // Eliminar duplicados basados en VariedadId
         const variedadesUnicasMap = new Map();
         for (const registro of registrosMuestra) {
             if (!variedadesUnicasMap.has(registro.VariedadId)) {
@@ -610,34 +784,30 @@ async function InsertarRegistroNoRealizado() {
         const variedadesUnicas = Array.from(variedadesUnicasMap.values());
 
         // Configuración común desde formulario
-        const semanaSelect = document.getElementById('semanasSelect');
-        const diasSelect = document.getElementById('diasSelect');        
         const fechaInput = document.getElementById('fechaInput') || { value: new Date().toISOString().split('T')[0] };
         const usuarioInput = document.getElementById('hidden-usuarioId');
 
-        const semana = Number.parseInt(semanaSelect.value);
-        const dia = validarCampoTexto(diasSelect.value);  
         const anio = Number.parseInt(document.getElementById('anio').value, 10);
         const mes = Number.parseInt(document.getElementById('mes').value, 10);        
-        const cantidad = Number.parseInt(1);
+        //const cantidad = Number.parseInt(1);
         const precio = Number.parseFloat(0);
-        const undm = null;
-        const tipomoneda = null;
-        const peso = null;
+        //const undm = null;
+        //const tipomoneda = null;
+        //const peso = null;
         const preciosustituido = null;
         const porcentajedescuento = null;
         const observaciones = null;
         const usuario = validarCampoTexto(usuarioInput?.value, 'Usuario');
-        const oferta = null; // Asumiendo valores booleanos fijos
+        const oferta = null;
         const descuento = null;
         const iva = null;
         const propina = null;
 
         const fecha = validarFecha(fechaInput.value.trim(), 'Fecha');
         const resultado = Number.parseInt(2);
-        const estado = Number.parseInt(0);
+        const estado = Number.parseInt(1);
 
-        // Paso 3: Insertar en "SeriesPrecios" para cada registro
+        // Paso 4: Insertar en "SeriesPrecios"
         const transactionSeries = db.transaction("SeriesPrecios", "readwrite");
         const storeSeries = transactionSeries.objectStore("SeriesPrecios");
 
@@ -647,22 +817,21 @@ async function InsertarRegistroNoRealizado() {
                 VariedadId: registro.VariedadId,
                 Anio: anio,
                 Mes: mes,
-                Dia: dia,
+                Dia: diaSemanaId, // Asegúrate de usar el campo correcto según tu estructura
                 muestraid : registro.muestraid,
                 Semana: semana,
                 Fecha: registro.Fecha,
                 PrecioRecolectado: precio,
-                //PrecioAnterior: Number.parseFloat(registro.PrecioRecolectadoAnt),
                 EsPesable: Boolean(registro.EsPesable),
-                Peso: peso,
-                Cantidad: cantidad,
-                UnidadMedidaId: undm,
+                Peso: registro.PesoAnt,
+                Cantidad: Number.parseInt(registro.CantidadAnt),
+                UnidadMedidaId: registro.UnidadMedidaId,
                 EsOferta: oferta,
                 TieneDescuento: descuento,
                 Descuento: porcentajedescuento,
                 TieneIva: iva,
                 TienePropina: propina,
-                MonedaId: tipomoneda,
+                MonedaId: registro.MonedaId,
                 EstadoProductoId: estado,
                 PrecioSustituidoR: preciosustituido,
                 PrecioSustituidoC: null,
@@ -675,14 +844,14 @@ async function InsertarRegistroNoRealizado() {
                 CoordenadaX: Number.parseFloat($("#lblLongitud").val()),
                 CoordenadaY: Number.parseFloat($("#lblLatitud").val())
             };
-            
+
             const requestPut = storeSeries.put(seriePrecio);
-            
+
             await new Promise((resolve, reject) => {
                 requestPut.onsuccess = resolve;
                 requestPut.onerror = () => reject(requestPut.error);
             });
-        }       
+        }
 
         // Esperar completación de transacción
         await new Promise((resolve, reject) => {
@@ -692,12 +861,11 @@ async function InsertarRegistroNoRealizado() {
 
         mostrarMensaje('Registros guardados exitosamente', 'success');
         let delay = alertify.get('notifier','delay');
-            alertify.set('notifier','delay', 2);  
-            alertify.set('notifier','position', 'bottom-center');
-            alertify.success('Registros guardados exitosamente');
-            alertify.set('notifier','delay', delay);
-        // alertify.set('notifier','position', 'bottom-center');
-        // alertify.success('Registros guardados exitosamente');
+        alertify.set('notifier','delay', 2);  
+        alertify.set('notifier','position', 'bottom-center');
+        alertify.success('Registros guardados exitosamente');
+        alertify.set('notifier','delay', delay);
+
         return {
             success: true,
             message: `Se insertaron ${variedadesUnicas.length} registros.`,
@@ -707,10 +875,10 @@ async function InsertarRegistroNoRealizado() {
         console.error('Error en InsertarRegistroNoRealizado:', error);
         mostrarMensaje(`Error: ${error.message}`, 'danger');
         let delay = alertify.get('notifier','delay');
-            alertify.set('notifier','delay', 2);  
-            alertify.set('notifier','position', 'bottom-center');
-            alertify.error(`Error: ${error.message}`);
-            alertify.set('notifier','delay', delay);
+        alertify.set('notifier','delay', 2);  
+        alertify.set('notifier','position', 'bottom-center');
+        alertify.error(`Error: ${error.message}`);
+        alertify.set('notifier','delay', delay);
         return {
             success: false,
             message: error.message
@@ -758,23 +926,6 @@ function validarNumero(valor, nombreCampo, esRequerido = false, estado = 0) {
     return valorNumerico;
 }
 
-function validarNumero2(valor, nombreCampo, esRequerido = false) {
-    // Verificar si el valor es una cadena vacía
-    if (esRequerido && (!valor || valor.trim() === '')) {
-        throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
-    }
-    const valorNumerico = Number(valor?.trim());
-    // Validar si el valor no es un número o es negativo
-    if (Number.isNaN(valorNumerico) || (esRequerido && valorNumerico < 0)) {
-        if (esRequerido) {
-            throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
-        }
-        return 0; // Valor por defecto para campos no requeridos
-    }
-    
-    return valorNumerico;
-}
-
 function validarBoolean(valor, nombreCampo) {
     if (valor?.trim().toLowerCase() === 'true') return true;
     if (valor?.trim().toLowerCase() === 'false') return false;
@@ -787,74 +938,6 @@ function validarFecha(fecha, nombreCampo) {
         throw new Error(`${nombreCampo} no es una fecha válida`);
     }
     return fecha;
-}
-
-function limpiarFormulario() {
-    // Reiniciar selects
-    const selects = [
-        'informantesSelect',
-        'variedadesSelect',
-        'resultadoSelect',
-        'estadoSelect',
-        'undmSelect',
-        'tipomonedaSelect'
-    ];
-
-    for (const id of selects) {
-        const select = document.getElementById(id);
-        if (select) select.selectedIndex = -1;
-    }
-
-    // Reiniciar inputs numéricos y de texto
-    const inputsLimpiar = [
-        'fechaa',
-        'precioa',
-        'espesable',
-        'detalle',
-        'cantidadInput',
-        'precioInput',
-        'pesoInput',
-        'preciosustituidoInput',
-        'nvecesInput',
-        'porcentajedescuentoInput',
-        'observacionesInput'
-    ];
-
-    for (const id of inputsLimpiar) {
-        const input = document.getElementById(id);
-        if (input) {
-            input.value = '';
-            if (input.type === 'number') {
-                input.value = 0;
-            }
-        }
-    }
-
-    // Reiniciar checkboxes
-    const checkboxes = [
-        '#ofertachk input[type="checkbox"]',
-        '#descuentochk input[type="checkbox"]',
-        '#ivachk input[type="checkbox"]',
-        '#propinachk input[type="checkbox"]'
-    ];
-
-    for (const selector of checkboxes) {
-        for (const checkbox of $(selector)) {
-            $(checkbox).prop('checked', false);
-        }
-    }
-
-    // Reiniciar fecha (si no es de solo lectura)
-    const fechaInput = document.getElementById('fechaInput');    
-    if (fechaInput && !fechaInput.readOnly) {
-        fechaInput.value = new Date().toISOString().split('T')[0];
-    }
-
-    // Enfocar primer campo
-    const primerCampo = document.getElementById('variedadesSelect');
-    if (primerCampo) primerCampo.focus();
-
-    mostrarMensaje('Formulario limpiado para nuevo registro', 'info');
 }
 
 async function cargarSeriePrecio(informanteId, variedadId, semana) {
@@ -882,63 +965,6 @@ async function cargarSeriePrecio(informanteId, variedadId, semana) {
         // Usar índice y rango de clave para búsqueda directa
         const index = store.index('BuscarxInfVarSem');
         const keyRange = IDBKeyRange.only([cleanInformante, cleanVariedad, cleanSemana]);
-        const cursorRequest = index.openCursor(keyRange);
-
-        const resultados = [];
-    
-        cursorRequest.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                // Agregar el registro encontrado
-                resultados.push(cursor.value);
-                cursor.continue();
-            } else {
-                // Procesar resultados
-                if (resultados.length > 0) {
-                    rellenarFormulario(resultados[0]); 
-                } else {
-                    // No hay registros
-                    limpiarVariedadDetalle("editar");
-                    mostrarMensaje("No se ha ingresado Serie Precio", "warning");
-                }
-            }
-        };
-
-        cursorRequest.onerror = (event) => {
-            console.error('Error al buscar en SeriesPrecios:', event.target.error);
-            mostrarMensaje(`Error al buscar serie de precio: ${event.target.error.message}`, "danger");
-        };
-
-    } catch (error) {
-        console.error('Error en cargarSeriePrecio:', error);
-        mostrarMensaje(`Error al procesar los datos: ${error.message}`, "danger");
-    }
-}
-
-async function cargarSeriePrecio2(informanteId, variedadId) {
-    try {
-        // Validar que los parámetros sean válidos
-        if (!informanteId || !variedadId) {
-            throw new Error('Informante y Variedad son requeridos');
-        }
-
-        // Limpiar espacios en los valores
-        const cleanInformante = informanteId.trim();
-        const cleanVariedad = variedadId.trim();
-
-        // Abrir la base de datos
-        const db = await IniciarBaseDatos();
-        const transaction = db.transaction('SeriesPrecios', 'readonly');
-        const store = transaction.objectStore('SeriesPrecios');
-
-        // ✅ Verificar si existe el índice necesario
-        if (!store.indexNames.contains('BuscarPorInformanteYVariedad')) {
-            throw new Error('Índice BuscarPorInformanteYVariedad no encontrado');
-        }
-
-        // ✅ Usar índice y rango de clave para búsqueda directa
-        const index = store.index('BuscarPorInformanteYVariedad');
-        const keyRange = IDBKeyRange.only([cleanInformante, cleanVariedad]);
         const cursorRequest = index.openCursor(keyRange);
 
         const resultados = [];
@@ -1010,14 +1036,14 @@ function setEstadoProductoCheckboxes(registro) {
 }
 
 // funcion para mostrar el detalle del informante
-async function getInformanteDetalle(codInformante, semana) {
-const db = await openDB();
+async function getInformanteDetalle(codInformante, semana, dia) {
+  const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('InformanteDetalle', 'readonly');
     const store = tx.objectStore('InformanteDetalle');
 
     // Asegurarse de que los campos sean string si así se guardaron
-    const key = [String(codInformante), Number.parseInt(semana)];
+    const key = [String(codInformante), Number.parseInt(semana), String(dia)];
 
     const req = store.get(key);
 
@@ -1185,83 +1211,78 @@ async function compararRegistros(informanteId) {
     }
 }
 
-async function mostrarDiferencias(informanteId, semana) {
+async function mostrarDiferencias(informanteId, semana, dia) {
     try {
         const db = await IniciarBaseDatos();
-        
+
         // 1. Obtener todas las variedades del informante desde Muestra
-        const muestraMap = new Map(); // VariedadId -> descripcion
-        const muestraTransaction = db.transaction('Muestra', 'readonly');
-        const muestraStore = muestraTransaction.objectStore('Muestra');
-        //! const muestraCursorRequest = muestraStore.openCursor();
-       
-        const index = muestraStore.index('BuscarxInformanteYSemana');
+        const muestraStore = db.transaction('Muestra', 'readonly').objectStore('Muestra');
+        const indexMuestra = muestraStore.index('BuscarxInfSemDia');
 
-        const request = index.getAll([String(informanteId), Number.parseInt(semana)]);
+        const keyRange = IDBKeyRange.only([informanteId.trim(), Number.parseInt(semana), dia.toString()]);
+        const requestMuestra = indexMuestra.getAll(keyRange);
 
-        request.onsuccess = function(event) {
-            const results = event.target.result;
-            if (results.length > 0) {
-                // Procesar los resultados
-                results.forEach(registro => {
-                    muestraMap.set(registro.VariedadId, registro.Descripcion);
-                });
-            } else {
-                console.warn('No se encontraron registros para la combinación Informante y Semana');
-            }
-        };
+        let muestraMap = new Map(); // VariedadId -> Descripcion
 
-        // 2. Construir mapa de descripciones de Muestra
-        // await new Promise((resolve, reject) => {
-        //     muestraCursorRequest.onsuccess = (event) => {
-        //         const cursor = event.target.result;
-        //         if (cursor) {
-        //             if (cursor.key[0] === informanteId.trim()) {
-        //                 muestraMap.set(cursor.key[1], cursor.value.Descripcion);
-        //             }
-        //             cursor.continue();
-        //         } else {
-        //             resolve();
-        //         }
-        //     };
-        //     muestraCursorRequest.onerror = reject;
-        // });
-
-        // 3. Obtener todas las variedades ya registradas en SeriesPrecios
-        const seriesSet = new Set();
-        const seriesTransaction = db.transaction('SeriesPrecios', 'readonly');
-        const seriesIndex = seriesTransaction.objectStore('SeriesPrecios').index('BuscarPorInformanteYVariedad');
-        // ✅ Usar IDBKeyRange.bound() para buscar todas las VariedadId para este InformanteId
-        const keyRange = IDBKeyRange.bound(
-            [informanteId.trim(), ''], 
-            [informanteId.trim(), '\uffff']
-        );
-        
-        const seriesCursorRequest = seriesIndex.openCursor(keyRange);
-
-        // 4. Llenar el Set con las variedades ya registradas
         await new Promise((resolve, reject) => {
-            seriesCursorRequest.onsuccess = (event) => {
+            requestMuestra.onsuccess = (event) => {
+                const registros = event.target.result;
+                if (registros && registros.length > 0) {
+                    registros.forEach(registro => {
+                        const variedadId = String(registro.VariedadId).trim();
+                        const descripcion = registro.Descripcion || "Sin nombre";
+                        muestraMap.set(variedadId, descripcion);
+                    });
+                }
+                resolve();
+            };
+            requestMuestra.onerror = (event) => {
+                reject(event.target.error);
+            };
+        });
+
+        // 2. Obtener todas las variedades ya registradas en SeriesPrecios
+        const seriesStore = db.transaction('SeriesPrecios', 'readonly').objectStore('SeriesPrecios');
+        const indexSeries = seriesStore.index('BuscarxInfSemDia');
+
+        const keyRangeSeries = IDBKeyRange.only([informanteId.trim(), Number.parseInt(semana), dia.toString()]);
+
+        const seriesSet = new Set();
+
+        await new Promise((resolve, reject) => {
+            const cursorRequest = indexSeries.openCursor(keyRangeSeries);
+
+            cursorRequest.onsuccess = (event) => {
                 const cursor = event.target.result;
                 if (cursor) {
-                    // El keyPath es ['InformanteId', 'VariedadId', 'Fecha'], pero el índice solo tiene ['InformanteId', 'VariedadId']
-                    const variedadId = cursor.key[1]; 
-                    if (variedadId) seriesSet.add(variedadId.trim());
+                    // ✅ Accedemos al VariedadId desde el valor del registro, no del índice
+                    const variedadId = String(cursor.value.VariedadId).trim();
+
+                    if (variedadId) {
+                        seriesSet.add(variedadId);
+                    }
+
                     cursor.continue();
                 } else {
                     resolve();
                 }
             };
-            seriesCursorRequest.onerror = reject;
-        });        
-        
-        // 5. Encontrar las faltantes comparando con Muestra
+            
+            cursorRequest.onerror = (event) => {
+                reject(event.target.error);
+            };
+        });
+       
+
+        // 3. Encontrar las variedades faltantes en SeriesPrecios
         const faltantes = [...muestraMap.keys()].filter(id => !seriesSet.has(id));
-        // 6. Mostrar listado de faltantes
-        mostrarListadoFaltantes(faltantes, muestraMap);
-        
-        // 7. Resaltar opciones en variedadesSelect
-        //resaltarFaltantes(faltantes);
+
+        // 4. Mostrar listado de faltantes
+        if (faltantes.length > 0) {
+            mostrarListadoFaltantes(faltantes, muestraMap);
+        } else {
+            mostrarMensaje("No hay variedades faltantes.", "success");
+        }
 
     } catch (error) {
         console.error('Error al mostrar diferencias:', error);
@@ -1269,39 +1290,39 @@ async function mostrarDiferencias(informanteId, semana) {
     }
 }
 
-async function marcarInformantesConDatosHoy() {
+async function marcarInformantesConDatosHoy(semana, dia) {
     const db = await openDB();
-    const informantesSelect = $('#informantesSelect'); // Usamos jQuery para select2
+    const informantesSelect = $('#informantesSelect');
 
-    // Obtener fecha de hoy en formato ISO
-    const hoy = new Date();
-    const hoyStr = hoy.toISOString().split('T')[0]; // "YYYY-MM-DD"
-    const fechaInicio = hoyStr + 'T00:00:00';
-    const fechaFin = hoyStr + 'T23:59:59';
-
-    const informantesHoy = new Set();
+    const informantesUnicos = new Set();
 
     const transaction = db.transaction(['SeriesPrecios'], 'readonly');
     const almacenSeries = transaction.objectStore('SeriesPrecios');
-    const index = almacenSeries.index('BuscarPorFechaCreacion');
-    const fechaRango = IDBKeyRange.bound(fechaInicio, fechaFin);
-    const cursorRequest = index.openCursor(fechaRango);
+    const index = almacenSeries.index('BuscarxInfSemDia');
+
+    const semanaInt = Number.parseInt(semana, 10);
+
+    // Definimos un rango para buscar todos los registros donde:
+    // InformanteId (cualquier cadena), Semana == semanaInt, Dia == dia
+    const lower = ["", semanaInt, dia]; // desde la cadena vacía
+    const upper = ["zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", semanaInt, dia]; // hasta una cadena muy alta
+
+    const keyRange = IDBKeyRange.bound(lower, upper, false, false);
+
+    const cursorRequest = index.openCursor(keyRange);
 
     cursorRequest.onsuccess = function(event) {
         const cursor = event.target.result;
+
         if (cursor) {
-            const registro = cursor.value;
-            const informanteId = registro.InformanteId;
-
+            const informanteId = cursor.value.InformanteId;
             if (informanteId !== undefined) {
-                informantesHoy.add(informanteId);
+                informantesUnicos.add(informanteId);
             }
-
-            cursor.continue(); // Continuar al siguiente
+            cursor.continue(); // Siguiente registro
         } else {
-            // cursor terminando => inicializar select2 con plantilla personalizada
-            inicializarSelect2ConMarcacion(informantesSelect, informantesHoy);
-            //actualizarSelect2(informantesSelect, informantesHoy);
+            // Cursor terminado => inicializar select2
+            inicializarSelect2ConMarcacion(informantesSelect, informantesUnicos);
         }
     };
 
@@ -1310,42 +1331,55 @@ async function marcarInformantesConDatosHoy() {
     };
 }
 
-async function marcarVariedadesConDatos() {
-    const db = await openDB();
-    const informantesSelect = $('#informantesSelect').val(); // Usamos jQuery para select2
-    let semanaSelect = $('#semanasSelect').val();
-    semanaSelect = Number.parseInt(semanaSelect);
-    const variedadesSelect = $('#variedadesSelect')
+async function marcarVariedadesConDatos(informanteId, semana, dia) {
+    try {
+        const informanteId = $('#informantesSelect').val(); // Usamos jQuery para select2
+        let semana = $('#semanasSelect').val();
+        semana = Number.parseInt(semana);
+        let dia = $('#diasSelect').val();
+        dia =dia;
+        const db = await openDB(); // Asegúrate que esta función exista y devuelva la BD abierta
+        const variedadesSelect = $('#variedadesSelect'); // jQuery selector para el select2
 
-    const variedadesHoy = new Set();
+        const variedadesHoy = new Set();
 
-    const transaction = db.transaction(['SeriesPrecios'], 'readonly');
-    const almacenSeries = transaction.objectStore('SeriesPrecios');
-    const index = almacenSeries.index('BuscarxInfSem');
-    const Rango = IDBKeyRange.bound([informantesSelect, semanaSelect], [informantesSelect, semanaSelect]);
+        const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+        const almacenSeries = transaction.objectStore('SeriesPrecios');
 
-    const cursorRequest = index.openCursor(Rango);
+        // Usar el índice BuscarxInfSemDia => [InformanteId, Semana, Dia]
+        const index = almacenSeries.index('BuscarxInfSemDia');
 
-    cursorRequest.onsuccess = function(event) {
-        const cursor = event.target.result;
-        if (cursor) {
-            const registro = cursor.value;
-            const variedadId = registro.VariedadId;
+        // Crear rango para buscar registros con:
+        // InformanteId = informanteId, Semana = semana, Dia = dia
+        const keyRange = IDBKeyRange.only([informanteId.trim(), Number.parseInt(semana), dia.toString()]);
 
-            if (variedadId !== undefined) {
-                variedadesHoy.add(variedadId);
+        const cursorRequest = index.openCursor(keyRange);
+
+        cursorRequest.onsuccess = function(event) {
+            const cursor = event.target.result;
+            if (cursor) {
+                const registro = cursor.value;
+                const variedadId = registro.VariedadId;
+
+                if (variedadId !== undefined && variedadId !== null) {
+                    variedadesHoy.add(variedadId.toString().trim());
+                }
+
+                cursor.continue(); // Continuar al siguiente
+            } else {
+                // Cursor terminado, inicializar Select2 con marcación
+                inicializarSelect2ConMarcacion(variedadesSelect, variedadesHoy);
             }
+        };
 
-            cursor.continue(); // Continuar al siguiente
-        } else {
-            // cursor terminando => inicializar select2 con plantilla personalizada
-            inicializarSelect2ConMarcacion(variedadesSelect, variedadesHoy);
-        }
-    };
+        cursorRequest.onerror = function(event) {
+            console.error("Error al leer los datos de SeriesPrecios:", event.target.error);
+        };
 
-    cursorRequest.onerror = function(event) {
-        console.error("Error al leer los datos de SeriesPrecios:", event.target.error);
-    };
+    } catch (error) {
+        console.error("Error al marcar variedades con datos:", error);
+        mostrarMensaje("Hubo un problema al cargar los datos previos.", "danger");
+    }
 }
 
 // Función que inicializa select2 con templateResult para marcar opciones
@@ -1382,239 +1416,6 @@ function inicializarSelect2ConMarcacion(selectElement, itemHoySet) {
         },
         escapeMarkup: function(markup) { return markup; } // Permite HTML en templates
     });
-}
-
-function actualizarSelect2(selectElement, informantesHoy) {
-    // Iterar sobre las opciones del select2
-    selectElement.find('option').each(function() {
-        const optionValue = $(this).val();
-        const tieneDatosHoy = informantesHoy.has(optionValue);
-        // Cambiar el color de fondo y el título
-        $(this).toggleClass('informante-datos-hoy', tieneDatosHoy);
-        $(this).attr('title', tieneDatosHoy ? "Este informante tiene datos hoy" : "");
-    });
-    // Actualizar el select2 para reflejar los cambios
-    selectElement.select2(); // Re-inicializar select2 para aplicar cambios
-}
-
-async function enviarDatos(obj) {
-    try {
-        const response = await jsonSeriesPrecios(obj);
-        const registrosNoEnviados = response.SeriesPrecios; // Extraemos los registros no enviados
-        if (registrosNoEnviados.length === 0) {           
-            mostrarMensaje("No hay registros pendientes por enviar", "success");
-            return;
-        }
-
-        const jsonData = JSON.stringify(response); // Convertir a JSON
-
-        const messageDiv = document.getElementById('message');
-        messageDiv.classList.add('d-none'); // Ocultar mensaje anterior
-
-        //Hacer la solicitud AJAX POST  https://localhost:7062  https://appcepov.inide.gob.ni
-        $.ajax({
-            url: 'https://appcepov.inide.gob.ni/endpoint/cipc/bulksupin', // Reemplaza con la URL de tu endpoint
-            type: 'POST',
-            contentType: 'application/json',
-            mode: 'cors',
-            data: jsonData,
-            success: async (serverResponse) => {  
-                try {
-                    // Marcar los registros como enviados en IndexedDB
-                    await marcarComoEnviados(registrosNoEnviados);
-                    mostrarMensaje(`Datos enviados y actualizados localmente. Respuesta del servidor: ${JSON.stringify(serverResponse)}`, "success");
-                    //? messageDiv.textContent = `Datos enviados exitosamente ${response}`;
-                } catch (error) {
-                    console.error("Error al marcar como enviados:", error);                  
-                    mostrarMensaje(`Datos enviados, pero no se pudo actualizar el estado local: ${error}`, "error");
-                }                
-            },
-            error: (xhr, status, error) => {
-                mostrarMensaje(`Error al enviar los datos: ${error}`, "error");            
-                //console.error "Detalles del error:", xhr.responseText
-            }           
-        });
-    } catch (error) {
-        console.error(error);
-    }
-}
-
-async function jsonSeriesPrecios(obj) {
-    try {
-        const db = await openDB();
-        const transaction = db.transaction(['SeriesPrecios'], 'readonly');
-        const store = transaction.objectStore('SeriesPrecios');
-        const request = store.getAll();
-
-        return new Promise((resolve, reject) => {
-            request.onsuccess = () => {
-                // Filtro según el valor de obj
-                const registrosNoEnviados = request.result.filter(item => {
-                    const baseCondition = item.Enviado === false && item.EsPesable === obj;
-
-                    if (!baseCondition) return false;
-
-                    // Si es pesable (obj === true), verificar que Peso sea válido
-                    if (obj === true) {
-                        return item.Peso === null ||  item.Peso > 0;
-                    }
-
-                    return true; // Para obj === false, no hay más condiciones
-                });
-
-                // Mapeo de SeriesPrecios_
-                const SeriesPrecios = registrosNoEnviados.map(item => ({
-                    InformanteId: item.InformanteId,
-                    VariedadId: item.VariedadId,
-                    Anio: item.Anio,
-                    Mes: item.Mes,
-                    muestraid: item.muestraid,
-                    Semana: item.Semana,
-                    Fecha: item.Fecha,
-                    PrecioRecolectado: item.PrecioRecolectado,
-                    PrecioAnterior: item.PrecioAnterior,
-                    Peso: item.Peso,
-                    Cantidad: item.Cantidad,
-                    UnidadMedidaId: item.UnidadMedidaId,
-                    EsOferta: Boolean(item.EsOferta),
-                    TieneDescuento: Boolean(item.TieneDescuento),
-                    Descuento: item.Descuento,
-                    TieneIva: Boolean(item.TieneIva),
-                    TienePropina: Boolean(item.TienePropina),
-                    MonedaId: item.MonedaId,
-                    EstadoProductoId: item.EstadoProductoId,
-                    PrecioSustituidoR: item.PrecioSustituidoR,
-                    PrecioSustituidoC: item.PrecioSustituidoC,
-                    ObservacionEnumerador: item.ObservacionEnumerador,
-                    FechaCreacion: item.FechaCreacion,
-                    CreadoPor: item.CreadoPor
-                }));
-
-                // Mapeo de Muestras
-                const Muestras = registrosNoEnviados.map(item => ({
-                    InformanteId: item.InformanteId,
-                    VariedadId: item.VariedadId,
-                    Nveces: item.Nveces
-                }));
-
-                // Creación de Informantes sin duplicados
-                const informantesMap = new Map();
-                registrosNoEnviados.forEach(item => {
-                    const codInformante = item.InformanteId;
-                    if (!informantesMap.has(codInformante)) {
-                        informantesMap.set(codInformante, {
-                            CodInformante: codInformante,
-                            NombreInformante: "",
-                            Direccion: "",
-                            DistritoId: "",
-                            Activo: true,
-                            CoordenadaX: item.CoordenadaX,
-                            CoordenadaY: item.CoordenadaY,
-                            IdEmpleado: item.CreadoPor
-                        });
-                    }
-                });
-
-                const Informantes = Array.from(informantesMap.values());
-
-                // Resolución del resultado
-                resolve({
-                    SeriesPrecios: SeriesPrecios,
-                    Muestras: Muestras,
-                    Informantes: Informantes
-                });
-            };
-
-            request.onerror = () => {
-                reject("Error al obtener los registros de SeriesPrecios");
-            };
-        });
-    } catch (error) {
-        console.error("Error al abrir la base de datos:", error);
-        throw error;
-    }
-}
-
-async function jsonSeriesPrecios1(obj) {
-    try {
-        const db = await openDB();
-        const transaction = db.transaction(['SeriesPrecios'], 'readonly');
-        const store = transaction.objectStore('SeriesPrecios');
-        const request = store.getAll();
-
-        return new Promise((resolve, reject) => {
-            request.onsuccess = () => {
-                // Filtrar los registros que no han sido enviados y que son no pesables
-                const registrosNoEnviados = request.result.filter(item => 
-                    item.Enviado === true   && item.EsPesable === obj
-                );  
-
-                const SeriesPrecios_ = registrosNoEnviados.map(item => ({
-                    InformanteId: item.InformanteId,
-                    VariedadId: item.VariedadId,
-                    Anio: item.Anio,
-                    Mes: item.Mes,
-                    muestraid : item.muestraid,
-                    Semana: item.Semana,
-                    Fecha: item.Fecha,
-                    PrecioRecolectado: item.PrecioRecolectado,
-                    PrecioAnterior: item.PrecioAnterior,
-                    Peso: item.Peso,
-                    Cantidad: item.Cantidad,
-                    UnidadMedidaId: item.UnidadMedidaId,
-                    EsOferta: Boolean(item.EsOferta),
-                    TieneDescuento: Boolean(item.TieneDescuento),
-                    Descuento: item.Descuento,
-                    TieneIva: Boolean(item.TieneIva),
-                    TienePropina: Boolean(item.TienePropina),
-                    MonedaId: item.MonedaId,
-                    EstadoProductoId: item.EstadoProductoId,
-                    PrecioSustituidoR: item.PrecioSustituidoR,
-                    PrecioSustituidoC: item.PrecioSustituidoC,
-                    ObservacionEnumerador: item.ObservacionEnumerador,
-                    FechaCreacion: item.FechaCreacion,
-                    CreadoPor: item.CreadoPor                    
-                }));
-
-                const Muestras = registrosNoEnviados.map(item => ({
-                    InformanteId: item.InformanteId,
-                    VariedadId: item.VariedadId,
-                    Nveces : item.Nveces
-                }));
-
-                // Usamos un Set para evitar duplicados por CodInformante
-                const informantesMap = new Map();
-                registrosNoEnviados.forEach(item => {
-                    const codInformante = item.InformanteId;
-                    if (!informantesMap.has(codInformante)) {
-                        informantesMap.set(codInformante, {
-                            CodInformante: codInformante,
-                            NombreInformante: "",
-                            Direccion: "",
-                            Activo: true,
-                            CoordenadaX: item.CoordenadaX,
-                            CoordenadaY: item.CoordenadaY
-                        });
-                    }
-                });
-
-                const Informantes = Array.from(informantesMap.values());
-
-                resolve({
-                    SeriesPrecios_: SeriesPrecios_,
-                    Muestras: Muestras,
-                    Informantes: Informantes
-                });
-            };
-
-            request.onerror = () => {
-                reject("Error al obtener los registros de SeriesPrecios");
-            };
-        });
-    } catch (error) {
-        console.error("Error al abrir la base de datos:", error);
-        throw error;
-    }
 }
 
 // Función auxiliar para abrir la base de datos
@@ -1762,10 +1563,10 @@ function mostrarListadoFaltantes(faltantes, muestraMap) {
     }
 }
 
-async function obtenerValidaMuestra(empleado) {
+async function obtenerValidaMuestra(empleado, semana, dia) {
     try {
         // Obtener datos desde la API https://appcepov.inide.gob.ni https://localhost:7062
-        const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/Validamuestra/${empleado}`,  {
+        const response = await fetch(`https://appcepov.inide.gob.ni/endpoint/cipc/Validamuestra/${empleado}/${semana}/${dia}`,  {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
@@ -1807,7 +1608,7 @@ async function obtenerValidaMuestra(empleado) {
                 const li = document.createElement("li");
                 li.className = "list-group-item d-flex justify-content-between align-items-center";
                 li.innerHTML = `
-                    <span><strong>${item.nombreInformante} / Semana ${item.semana}</strong></span>
+                    <span><strong>${item.nombreInformante} </strong></span>
                     <button class="btn btn-sm btn-primary" onclick="irMuestra(${item.semana}, '${item.diaSemanaId}', '${item.codInformante.trim()}')">
                         Ver
                     </button>                    
@@ -1852,12 +1653,12 @@ async function obtenerValidaMuestra(empleado) {
     }
 }
 
-async function mostrarPesableFaltante() {
+async function mostrarPesableFaltante(semana, dia) {
   try {
     const db = await openDB();
 
     // 1. Obtener todos los registros válidos de SeriesPrecios
-    const records = await getValidSeriesRecords(db);
+    const records = await getValidSeriesRecords(db, semana, dia);
     if (!records.length) {
       // Mostrar modal sin resultados
       mostrarModal([]);
@@ -1877,9 +1678,10 @@ async function mostrarPesableFaltante() {
       const dia = record.Dia;
 
       const [informante, variedad] = await Promise.all([
-        getInformante(db, informanteId, semana),
-        getVariedad(db, variedadId, informanteId)
+        getInformante(db, informanteId, semana, dia),
+        getVariedad(db, variedadId, informanteId, semana, dia)
       ]);
+      console.error(variedad)
 
       if (informante && variedad) {
         resultado.push({
@@ -1912,7 +1714,7 @@ async function mostrarPesableFaltante() {
   }
 }
 
-function getValidSeriesRecords(db) {
+function getValidSeriesRecords(db, semana, dia) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('SeriesPrecios', 'readonly');
     const store = tx.objectStore('SeriesPrecios');
@@ -1928,7 +1730,9 @@ function getValidSeriesRecords(db) {
         if (
           record.EsPesable === true &&
           record.Enviado === false &&
-          record.Peso === Number.parseInt(0)
+          record.Peso === Number.parseInt(0) &&
+          record.Semana === Number.parseInt(semana) &&
+          record.Dia === dia
           //(record.Peso <= 0 || record.Peso === null)
         ) {
           records.push(record);
@@ -1946,46 +1750,52 @@ function getValidSeriesRecords(db) {
   });
 }
 
-function getInformante2(db, informanteId) {
+function getInformante(db, informanteId, semana, dia) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('Informantes', 'readonly');
     const store = tx.objectStore('Informantes');
-    const index = store.index('BuscarInformante');
-    const req = index.getAll(String(informanteId)); // Obtener todos los registros que coincidan
 
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+    // Clave compuesta según el keyPath: ['CodInformante', 'Semana', 'Dia']
+    const key = [
+      String(informanteId),         // CodInformante (string)
+      Number.parseInt(semana),      // Semana (número)
+      String(dia)                   // Dia (string, por consistencia)
+    ];
 
-function getInformante(db, informanteId, semana) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('Informantes', 'readonly');
-    const store = tx.objectStore('Informantes');
-    
-    // Crear el array clave según el keyPath definido ['CodInformante', 'Semana']
-    const key = [String(informanteId), Number.parseInt(semana)];
     const req = store.get(key);
+
     req.onsuccess = () => {
-      resolve(req.result);
+      resolve(req.result); // Devuelve el registro o undefined si no se encontró
     };
-    
+
     req.onerror = () => {
-      reject(req.error);
+      reject(`Error al obtener el informante: ${req.error}`);
     };
   });
 }
 
-function getVariedad(db, variedadId, informanteId) {
+function getVariedad(db, variedadId, informanteId, semana, dia) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('Variedades', 'readonly');
     const store = tx.objectStore('Variedades');
-    // Forzar ambos valores a ser strings y mantener el formato esperado
-    const key = [String(variedadId), String(informanteId)];
-    const req = store.get(key);
 
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    // Clave compuesta según keyPath: ['id', 'informanteId', 'Semana', 'Dia']
+    const key = [
+      String(variedadId),            // id
+      String(informanteId),          // informanteId
+      Number.parseInt(semana),       // Semana
+      String(dia)                    // Dia
+    ];
+
+    const request = store.get(key);
+
+    request.onsuccess = function(event) {
+      resolve(event.target.result); // Devuelve el registro o undefined si no se encontró
+    };
+
+    request.onerror = function(event) {
+      reject(`Error al obtener el registro de Variedades: ${event.target.error}`);
+    };
   });
 }
 
@@ -2005,7 +1815,6 @@ function mostrarModal(resultado) {
 
     const listGroup = document.createElement("ul");
     listGroup.className = "list-group list-group-flush";
-
     resultado.forEach(item => {
       const li = document.createElement("li");
       li.className = "list-group-item d-flex justify-content-between align-items-center";
@@ -2065,7 +1874,7 @@ function irMuestra(semana, diaSemanaId, codInformante) {
             $("#diasSelect").val(diaSemanaId).trigger("change");
             filterAndPopulateInformantes().then(resultado => {
                 $("#informantesSelect").val(codInformante).trigger("change");
-                 mostrarDiferencias(codInformante,semana);
+                 mostrarDiferencias(codInformante,semana, diaSemanaId);
                 $('#resultadoSelect').select2("val", "ca");
                 $("#resultadoSelect").prop("disabled", false);     
             });
@@ -2073,6 +1882,38 @@ function irMuestra(semana, diaSemanaId, codInformante) {
             console.warn("Alguno de los selects no existe aún.");
         }
     });
+}
+
+async function confirmarNoEntrevista() {
+    // Mostrar el modal de confirmación
+    new bootstrap.Modal(document.getElementById("modalConfirmacion")).show();
+
+    // Agregar evento al botón de eliminar
+    $('#btnConfirmar').off('click').on('click', async function() {
+        try {
+             $("#filtrarBtn").prop("disabled", true);
+            const semana = document.getElementById('semanasSelect'); 
+            const dia = document.getElementById('diasSelect'); 
+            InsertarRegistroNoRealizado()
+            .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.                
+                return marcarInformantesConDatosHoy(semana.value, dia.value); // Retorna la promesa de marcarInformantesConDatosHoy()
+            })
+            .catch(error => {
+                console.error("Ocurrió un error en la cadena de promesas:", error);
+                // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
+                // throw error;        
+            });
+        } catch (error) {
+            mostrarMensaje(`Error inesperado: ${error.message}`, "error");
+        } finally {
+            // Ocultar el modal de confirmación
+            $('#modalConfirmacion').modal('hide');
+        }
+    });
+
+    $('#btnCancelar').off('click').on('click', function() { 
+        $('#modalConfirmacion').modal('hide');
+        })
 }
 
 // Encapsula todos los eventos de ListarMuestra.html
@@ -2085,16 +1926,8 @@ function setupListarMuestraEventListeners() {
             marcarVariedadesConDatos();
         }
         else {
-            $("#filtrarBtn").prop("disabled", true);
-            InsertarRegistroNoRealizado()
-            .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.                
-                return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
-            })
-            .catch(error => {
-                console.error("Ocurrió un error en la cadena de promesas:", error);
-                // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
-                // throw error;        
-            });
+            confirmarNoEntrevista();
+           
         }
     });                        
 
@@ -2103,6 +1936,9 @@ function setupListarMuestraEventListeners() {
     });
 
     document.getElementById('guardarBtn').addEventListener('click', () => {
+         const semana = document.getElementById('semanasSelect'); 
+         const dia = document.getElementById('diasSelect'); 
+         const informanteId = $("#informantesSelect").val().trim();
         insertarSeriePrecio()
         .then(resultado => {
             if (!resultado.success) {
@@ -2111,7 +1947,8 @@ function setupListarMuestraEventListeners() {
             else {
                 // Limpiar formulario después de guardar
                 limpiarVariedadDetalle("nuevo");
-                marcarInformantesConDatosHoy();
+                marcarInformantesConDatosHoy(semana.value, dia.value);
+                CargarSelectFiltros(informanteId, semana.value, dia.value, variedadesSelect, "id", "Descripcion")
                 marcarVariedadesConDatos();
             }
         })
@@ -2123,13 +1960,16 @@ function setupListarMuestraEventListeners() {
     document.getElementById('btnfiltrarIngresadas').addEventListener('click', () => {
         const informanteId = $('#informantesSelect').val();
         const semana = document.getElementById('semanasSelect'); 
-        mostrarDiferencias(informanteId, semana.value);
+         const dia = document.getElementById('diasSelect'); 
+        mostrarDiferencias(informanteId, semana.value, dia.value);
     });
     
-    $('#diasSelect').on('select2:select',  function (e) { 
+    $('#diasSelect').on('select2:select',  function (e) {
+         const semana = document.getElementById('semanasSelect'); 
+        const dia = document.getElementById('diasSelect');  
         filterAndPopulateInformantes()
         .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.
-            return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
+            return marcarInformantesConDatosHoy(semana.value, dia.value); // Retorna la promesa de marcarInformantesConDatosHoy()
         })
         .catch(error => {
             console.error("Ocurrió un error en la cadena de promesas:", error);
@@ -2142,30 +1982,25 @@ function setupListarMuestraEventListeners() {
         const informanteId = $(this).val();
         const variedadDetalle = document.getElementById('variedadDetalle'); 
         const semana = document.getElementById('semanasSelect'); 
+        const dia = document.getElementById('diasSelect'); 
         try {
             //? await compararRegistros(informanteId);
-            getLocation();            
-            getInformanteDetalle(informanteId, semana.value)
-            .then(registro => {
-                if (registro) {
-                console.log('Registro encontrado:', registro);
-                } else {
-                console.log('No se encontró registro.');
-                }
-            })
+           getLocation();         
+            getInformanteDetalle(informanteId, semana.value, dia.value)
+                .then(registro => {
+                    setCurrentDateTime();
+                })
             .catch(error => {
                 console.error('Error en la base de datos:', error);
             });
-            mostrarDiferencias(informanteId, semana.value);                            
+            mostrarDiferencias(informanteId, semana.value, dia.value);
+                                        
             $('#resultadoSelect').select2("val", "ca");
             $("#resultadoSelect").prop("disabled", false);
             $("#filtrarBtn").prop("disabled", true );
             $("#guardarBtn").prop("disabled", false );                               
             variedadDetalle.style.display = 'none';
-            limpiarVariedadDetalle("nuevo");
-
-            //? const cant = await actualizarCantidad(informanteId);
-            //? $("#cpproducto").val(cant);
+            limpiarVariedadDetalle("nuevo");           
         } catch (error) {
             console.log('Error al comparar registros:', error);
             mostrarMensaje('No se puedo recuperar numerador.', "error");
@@ -2181,9 +2016,9 @@ function setupListarMuestraEventListeners() {
     
     // ✅ Alternativa usando evento de Select2
     $('#resultadoSelect').on('select2:select', function (e) {                              
-        //const estadoId = $(this).val();
-        //if (estadoId==1) {
             const informanteId = $("#informantesSelect").val().trim();
+            const semana = $("#semanasSelect").val(); 
+            const dia = $("#diasSelect").val();  
             const variedadesSelect = document.getElementById('variedadesSelect');  
             
             // Habilitar el select
@@ -2196,7 +2031,9 @@ function setupListarMuestraEventListeners() {
             variedadesSelect.innerHTML = '<option value="">Cargando variedades...</option>';
 
             // Cargar variedades filtradas por informanteId
-            cargarSelect('Variedades', variedadesSelect, 'id', 'Descripcion', 'id', 'informanteId', informanteId);
+            //('Variedades', variedadesSelect, 'id', 'Descripcion', 'id', 'informanteId', informanteId);
+            CargarSelectFiltros(informanteId, semana, dia, variedadesSelect, "id", "Descripcion")
+
                                                     
             // Si no hay variedades
             if (variedadesSelect.options.length < 1) {
@@ -2204,25 +2041,14 @@ function setupListarMuestraEventListeners() {
                 variedadesSelect.innerHTML = '<option value="">No hay variedades para este informante</option>';
             }
                 $("#filtrarBtn").prop("disabled", false);
-        // } 
-        // else {
-        //     $("#filtrarBtn").prop("disabled", true);
-        //     InsertarRegistroNoRealizado()
-        //     .then(() => { // Usa una función flecha para asegurar que `this` se mantenga correcto.
-        //         return marcarInformantesConDatosHoy(); // Retorna la promesa de marcarInformantesConDatosHoy()
-        //     })
-        //     .catch(error => {
-        //         console.error("Ocurrió un error en la cadena de promesas:", error);
-        //         // Opcional: Lanza el error de nuevo si quieres que el error se propague aún más.
-        //         // throw error;        
-        //     });
-        // }                            
+                                   
     });
 
     $('#variedadesSelect').on('select2:select', async function (e) { 
         const informanteId = document.getElementById('informantesSelect').value;                            
         const variedadId = $(this).val();
         const semanaId = document.getElementById('semanasSelect').value;
+        const diaId = document.getElementById('diasSelect').value;
         const undmSelect = document.getElementById('undmSelect');  
 
         // Validar al menos un filtro seleccionado
@@ -2232,7 +2058,7 @@ function setupListarMuestraEventListeners() {
         }                            
         
         // Llamar a la función para filtrar muestras
-        filtrarMuestras(informanteId, variedadId, semanaId);
+        filtrarMuestras(informanteId, variedadId, semanaId, diaId);
 
         undmSelect.disabled = false;                          
     
@@ -2254,15 +2080,22 @@ function setupListarMuestraEventListeners() {
         const estadoId = $(this).val();
         const vecesn = Number.parseInt(sMuestra.Nveces) + 1;
         const pesablees = sMuestra.EsPesable;
+        console.error(pesablees)
+        const cantidadant = Number.parseInt(sMuestra.CantidadAnt);
         $("#cantidadInput").val(0);                            
         $("#undmSelect").val(sMuestra.UnidadMedidaId).trigger("change");
         if (estadoId > 0 && estadoId < 4) { 
-            $("#undmSelect").prop("disabled", true);
+            $("#undmSelect").prop("disabled", false);
+            $("#cantidadInput").val(cantidadant); 
             $("#cantidadInput").prop("disabled", true);
             $("#precioInput").val(0)
             $("#precioInput").prop("disabled", true);
+            if (pesablees) {
+                console.error("entre pesable")
+                $('#pesoInput').val(sMuestra.PesoAnt);  
+            }
             $('#pesoInput').prop("disabled", true);
-             $('#tipomonedaSelect').prop("disabled", true);            
+            $('#tipomonedaSelect').prop("disabled", false);            
             if (estadoId== 2) {
                 $('#preciosustituidoInput').prop("disabled", false);  
             } else { $('#preciosustituidoInput').prop("disabled", true); }                                
@@ -2275,17 +2108,17 @@ function setupListarMuestraEventListeners() {
             $("#precioInput").prop("disabled", false);
             $('#tipomonedaSelect').prop("disabled", false);
             if (pesablees) {
-                    $('#pesoInput').prop("disabled", false);  
+                $('#pesoInput').prop("disabled", false);  
             } else { $('#pesoInput').prop("disabled", true); }  
             $('#preciosustituidoInput').val(0);
             $('#preciosustituidoInput').prop("disabled", true);  
             $(".schk").prop("disabled", false);
-            //? $('#ofertano').prop('checked', true);  
-            //? $('#descuentono').prop('checked', true);
-            //? $('#ivano').prop('checked', true);
-            //? $('#propinano').prop('checked', true);                       
+            $('#ofertano').prop('checked', true);  
+            $('#descuentono').prop('checked', true);
+            $('#ivano').prop('checked', true);
+            $('#propinano').prop('checked', true);                       
         } 
-        $("#tipomonedaSelect").val(1).trigger("change");                             
+        $("#tipomonedaSelect").val(sMuestra.MonedaId).trigger("change");                             
     });    
 
     $('#ofertachk').on('click', 'input[type=checkbox]', function () {
@@ -2310,655 +2143,1637 @@ function setupListarMuestraEventListeners() {
     });
 }
 
-// evalua el numerador del informante y devuelve su cantidad
-async function actualizarCantidad(informanteId) {
-    const db = await IniciarBaseDatos();
-    return new Promise((resolve, reject) => {       
-        const transaction = db.transaction('Numerador', 'readonly');
-        const store = transaction.objectStore('Numerador');
-
-        const requestGet = store.get(informanteId);
-
-        requestGet.onerror = (event) => {
-            reject(event.target.error);
-        };
-
-        requestGet.onsuccess = (event) => {
-            const record = event.target.result;
-            if (record) {
-                // encontrado, incrementa cantidad
-                record.cantidad = (record.cantidad || 0) + 1;
-                resolve(record.cantidad);
-            } else {
-                // no encontrado,  cantidad=1
-                resolve(1);
-            }
-        };
-    });
-}
-
-// Función para obtener una muestra por ID
-async function getMuestraById(id) {
-    const db = await IniciarBaseDatos();
-    const transaction = db.transaction('Muestra', 'readonly');
-    const store = transaction.objectStore('Muestra');
-    const request = store.get(id);
-
-    return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject('Error al obtener la muestra');
-    });
-}
-
-// Función que se llama desde el botón de cada fila
-async function SeleccionarMuestra(muestraId) {
-    if (!muestraId) {
-        console.error('ID de muestra no válido');
-        return;
-    }
-
-    try {
-        const muestra = await getMuestraById(muestraId);
-        const detalleDiv = document.getElementById('muestrasDetalle');
-
-        // Plantilla de detalle con formulario editable
-        detalleDiv.innerHTML = `
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    Detalle de Muestra
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="muestraid" class="form-label">ID de la Muestra:</label>
-                        <input type="text" class="form-control" id="muestraid" value="${muestra.id}" disabled>
-                    </div>
-                    <div class="mb-3">
-                        <label for="detalle" class="form-label">Detalle:</label>
-                        <input type="text" class="form-control" id="detalle" value="${muestra.detalle || ''}">
-                    </div>
-                    <div class="mb-3">
-                        <label for="sem1" class="form-label">Sem1:</label>
-                        <select id="sem1" class="form-select">
-                            <option value="true" ${muestra.sem1 === true ? 'selected' : ''}>Activo</option>
-                            <option value="false" ${muestra.sem1 === false ? 'selected' : ''}>Inactivo</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="nveces" class="form-label">nveces:</label>
-                        <input type="text" class="form-control" id="nveces" value="${muestra.nveces}">
-                    </div>
-                    <div class="d-grid gap-2 mt-3">
-                        <button class="btn btn-success btn-sm" onclick="actualizarMuestra('${muestra.id}')">
-                            <i class="bi bi-save"></i> Actualizar Muestra
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    } catch (error) {
-        console.error('Error al cargar los datos:', error);
-        document.getElementById('muestrasDetalle').innerHTML = `
-            <div class="alert alert-danger" role="alert">
-                No se pudo cargar el detalle de la muestra.
-            </div>
-        `;
+function validateDecimal(input) {
+    // Obtenemos el valor del input
+    let value = input.value;
+    
+    // Si hay un punto decimal
+    if (value.includes('.')) {
+        // Dividimos en parte entera y decimal
+        const parts = value.split('.');
+        
+        // Si hay más de 2 decimales, truncamos
+        if (parts[1] && parts[1].length > 2) {
+            input.value = parts[0] + '.' + parts[1].substring(0, 2);
+        }
     }
 }
 
-// Función para actualizar la muestra
-async function actualizarMuestra(id) {
+async function enviarDatos(obj) {
+    const spinner = document.getElementById('spinner');
     try {
-        if (!id || id.trim() === '') {
-            alert('ID de muestra no válido');
+         // Mostrar el spinner
+        spinner.style.display = 'block';
+
+        const response = await jsonSeriesPrecios(obj);
+        const registrosNoEnviados = response.SeriesPrecios; // Extraemos los registros no enviados
+        if (registrosNoEnviados.length === 0) {           
+            mostrarMensaje("No hay registros pendientes por enviar", "success");
             return;
         }
 
-        const detalleDiv = document.getElementById('muestrasDetalle');
-        const detalle = $("#detalle").val(); //? document.getElementById('detalle').value;
-        const sem1 = $("#sem1").val();
-        const nveces = $("#nveces").val();
-        const usuario = $("#hidden-usuarioId").val();
-        const lng = $("#lblLongitud").val();
-        const lat = $("#lblLatitud").val();
+        const jsonData = JSON.stringify(response); // Convertir a JSON
+        //console.error(jsonData)
 
-        const db = await IniciarBaseDatos();
-        const transaction = db.transaction('Muestra', 'readwrite');
-        const store = transaction.objectStore('Muestra');
-        
-        // Obtener el registro actual
-        const idNumerico = Number(id);
-        const request = store.get(idNumerico);
-        
-        request.onsuccess = async () => {
-            
-            // Obtener el registro actual
-            const registroActualizado = request.result;
-            // 🔍 Validación: Si no se encuentra el registro
-            if (!registroActualizado) {
-                alert('No se encontró el registro para actualizar');
-                return;
-            }
-            
-            // Actualizar solo los campos editables
-            registroActualizado.detalle = detalle;
-            registroActualizado.sem1 = sem1;
-            registroActualizado.nveces = nveces;
-            registroActualizado.usuario = usuario;
-            registroActualizado.lng = lng;
-            registroActualizado.lat = lat;
-            
-            // Guardar cambios
-            const putRequest = store.put(registroActualizado);
-            
-            putRequest.onsuccess = () => {
-                mostrarMensaje('Muestra actualizada correctamente', "success");
-                
-                // Refrescar la tabla con los mismos filtros
-                detalleDiv.innerHTML = '';
-                const informanteId = document.getElementById('informantesSelect').value;
-                const variedadId = document.getElementById('variedadesSelect').value;
-                const semanaId = document.getElementById('semanaSelect').value;
-                filtrarMuestras(informanteId, variedadId, semanaId);
-            };
-            
-            putRequest.onerror = () => {
-                alert('Error al actualizar la muestra');
-            };
-        };
-        
-        request.onerror = () => {
-            alert('Error al obtener la muestra para actualizar');
-        };
-        
+        const messageDiv = document.getElementById('message');
+        messageDiv.classList.add('d-none'); // Ocultar mensaje anterior https://appcepov.inide.gob.ni https://localhost:7062
+
+         const responsess = await fetch('https://appcepov.inide.gob.ni/endpoint/cipc/bulksupin', {
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/json',
+               },
+               mode: 'cors',
+               body: jsonData,
+           });
+           
+           if (!responsess.ok) {
+                mostrarMensaje(`Error al enviar los datos: ${error}`, "error");   
+               throw new Error(`Error: ${responsess.statusText}`);
+           }
+           const serverResponse = await responsess.json();
+           try {
+            await marcarComoEnviados(registrosNoEnviados);
+            mostrarMensaje(`Datos enviados y actualizados localmente. Respuesta del servidor: ${JSON.stringify(serverResponse)}`, "success");
+           } catch (error) { 
+            mostrarMensaje(`Datos enviados, pero no se pudo actualizar el estado local: ${error}`, "error");
+           }
+           
+
+        //Hacer la solicitud AJAX POST  https://localhost:7062   https://appcepov.inide.gob.ni
+        // $.ajax({
+        //     url: 'https://localhost:7062/endpoint/cipc/bulksupin', // Reemplaza con la URL de tu endpoint
+        //     type: 'POST',
+        //     contentType: 'application/json',
+        //     mode: 'cors',
+        //     data: jsonData,
+        //     success: async (serverResponse) => {  
+        //         try {
+        //             // Marcar los registros como enviados en IndexedDB
+        //             await marcarComoEnviados(registrosNoEnviados);
+        //             mostrarMensaje(`Datos enviados y actualizados localmente. Respuesta del servidor: ${JSON.stringify(serverResponse)}`, "success");
+        //             //? messageDiv.textContent = `Datos enviados exitosamente ${response}`;
+        //         } catch (error) {
+        //             console.error("Error al marcar como enviados:", error);                  
+        //             mostrarMensaje(`Datos enviados, pero no se pudo actualizar el estado local: ${error}`, "error");
+        //         }                
+        //     },
+        //     error: (xhr, status, error) => {
+        //         mostrarMensaje(`Error al enviar los datos: ${error}`, "error");            
+        //         //console.error "Detalles del error:", xhr.responseText
+        //     }           
+        // });
     } catch (error) {
-        console.error('Error al actualizar la muestra:', error);
-        alert('Ocurrió un error al guardar los cambios');
+         mostrarMensaje(`Error al enviar los datos: ${error}`, "error");   
+        console.error(error);
+    } finally {
+        // Ocultar el spinner
+        spinner.style.display = 'none';
     }
 }
 
-async function actualizarNveces() {
-    const informanteId = "11-1000016";
-    const variedadId = "011420403";
-    const fecha = "2025-05-06T00:00:00"; // Asegúrate que coincida exactamente con el formato almacenado
-
+async function jsonSeriesPrecios(obj) {
     try {
-        const db = await openDB(); // Usamos la función auxiliar definida antes
-        const transaction = db.transaction(["SeriesPrecios"], "readwrite");
-        const store = transaction.objectStore("SeriesPrecios");
-
-        // 1. Obtener el registro por clave compuesta
-        const keyPath = [informanteId, variedadId, fecha];
-        const getRequest = store.get(keyPath);
-
-        const item = await new Promise((resolve, reject) => {
-            getRequest.onsuccess = () => resolve(getRequest.result);
-            getRequest.onerror = () => reject("Error al obtener el registro.");
-        });
-
-        if (!item) {
-            throw new Error("Registro no encontrado.");
-        }
-
-        // 2. Actualizar el campo Nveces
-        //item.Nveces = 0;
-        item.Enviado = false;
-
-        // 3. Guardar el registro actualizado
-        const putRequest = store.put(item);
-
-        await new Promise((resolve, reject) => {
-            putRequest.onsuccess = () => resolve();
-            putRequest.onerror = () => reject("Error al guardar el registro actualizado.");
-        });
-
-        console.log("Registro actualizado exitosamente.");
-    } catch (error) {
-        console.error("Error al actualizar el registro:", error);
-    }
-}
-
-async function actualizarNveces2() {
-    try {
-        const db = await openDB(); // Usamos la función auxiliar definida antes
-        const transaction = db.transaction(["SeriesPrecios"], "readwrite");
-        const store = transaction.objectStore("SeriesPrecios");
-
-        // 1. Obtener todos los registros
-        const getAllRequest = store.getAll();
-
-        const items = await new Promise((resolve, reject) => {
-            getAllRequest.onsuccess = () => resolve(getAllRequest.result);
-            getAllRequest.onerror = () => reject("Error al obtener los registros.");
-        });
-
-        if (!items || items.length === 0) {
-            throw new Error("No se encontraron registros.");
-        }
-
-        // 2. Actualizar el campo deseado en todos los registros
-        items.forEach(item => {
-            item.Enviado = false; // Actualiza el campo Enviado a false
-            // Puedes agregar más campos a actualizar aquí si es necesario
-        });
-
-        // 3. Guardar los registros actualizados
-        const promises = items.map(item => {
-            const putRequest = store.put(item);
-            return new Promise((resolve, reject) => {
-                putRequest.onsuccess = () => resolve();
-                putRequest.onerror = () => reject("Error al guardar el registro actualizado.");
-            });
-        });
-
-        await Promise.all(promises); // Esperar a que se guarden todos los registros
-
-        console.log("Todos los registros actualizados exitosamente.");
-    } catch (error) {
-        console.error("Error al actualizar los registros:", error);
-    }
-}
-
-
-function setCurrentDateTime2() {
-    const input = document.getElementById('fechaInput');
-    if (!input) return;
-
-    const now = new Date();
-    
-    // Formato con 7 decimales (microsegundos)
-    const year = now.getFullYear();
-    $("#anio").val(year)
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    $("#mes").val()
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-
-    // Formato completo para SQL Server: YYYY-MM-DDTHH:MM:SS.SFFFFFFF
-    const formatted = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}000`;
-    
-    input.value = formatted; // Aún mostrando solo HH:MM
-    input.setAttribute('data-full-datetime', formatted); // Almacenar el formato completo
-}
-
-function getFullDateTime() {
-    const input = document.getElementById('fechaInput');
-    const storedValue = input.getAttribute('data-full-datetime');
-    
-    // Si no se ha guardado antes, genera uno nuevo
-    if (storedValue) return storedValue;
-    
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-    
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}000`;
-}
-
-function mostrarListadoFaltantes2(faltantes, muestraMap) {
-    const contenedor = document.getElementById('listadoFaltantes');
-    if (!contenedor || faltantes.length === 0) return;
-
-    // Limpiar contenedor anterior
-    contenedor.innerHTML = '';
-
-    // Crear listado de faltantes
-    const card = document.createElement('div');
-    card.className = 'card mt-3';
-    
-    const header = document.createElement('div');
-    header.className = 'card-header bg-warning text-dark';
-    header.textContent = 'Variedades Faltantes';
-    
-    const listGroup = document.createElement('ul');
-    listGroup.className = 'list-group list-group-flush';
-    
-    // Agregar cada variedad faltante con su descripción
-    for (const id of faltantes) {
-        const li = document.createElement('li');
-        li.className = 'list-group-item';
-        const descripcion = muestraMap.get(id) || id;
-        li.textContent = `${descripcion} (${id})`;
-        listGroup.appendChild(li);
-    }
-
-    card.appendChild(header);
-    card.appendChild(listGroup);
-    contenedor.appendChild(card);
-}
-
-function limpiarFormulario2() {
-    const variedadesSelect = document.getElementById('variedadesSelect');
-    if (!variedadesSelect) return;
-
-    for (const option of Array.from(variedadesSelect.options)) {
-        option.style.backgroundColor = '';
-    }
-}
-
-async function insertarSeriePrecio2() {
-    try {
-        // Obtener valores de los elementos del DOM
-        const informanteSelect = document.getElementById('informantesSelect');
-        const variedadesSelect = document.getElementById('variedadesSelect');
-        const resultadoSelect = document.getElementById('resultadoSelect');
-        const estadoSelect = document.getElementById('estadoSelect');
-        const cantidadInput = document.getElementById('cantidadInput');
-        const precioInput = document.getElementById('precioInput');
-        const undmSelect =  document.getElementById('undmSelect');
-        const tipomonedaSelect = document.getElementById('tipomonedaSelect');
-        const pesoInput = document.getElementById('pesoInput');
-        const preciosustituidoInput = document.getElementById('preciosustituidoInput');
-        const nvecesInput = document.getElementById('nvecesInput');
-        let ofertaActivo;
-        const ofertaCheck = $("#ofertachk input[type='checkbox']");
-        for (const value of ofertaCheck) {
-            if ($(value).prop('checked') === true) {
-                ofertaActivo = value.value;
-            }
-        }
-        let descuentoActivo;
-        const descuentoCheck = $("#descuentochk input[type='checkbox']");
-        for (const value of descuentoCheck) {
-            if ($(value).prop('checked') === true) {
-                descuentoActivo = value.value;
-            }
-        }
-        const porcentajedescuentoInput = document.getElementById('porcentajedescuentoInput');
-        let ivaActivo;
-        const ivaCheck = $("#ivachk input[type='checkbox']");
-        for (const value of ivaCheck) {
-            if ($(value).prop('checked') === true) {
-                ivaActivo = value.value;
-            }
-        }
-        let propinaActivo;
-        const propinaCheck = $("#propinachk input[type='checkbox']");
-        for (const value of propinaCheck) {
-            if ($(value).prop('checked') === true) {
-                propinaActivo = value.value;
-            }
-        }
-        const observacionesInput = document.getElementById('observacionesInput');
-        
-        
-        // Asumiendo que hay un campo de fecha en el formulario
-        const fechaInput = document.getElementById('fechaInput') || { value: new Date().toISOString().split('T')[0] };
-        
-        // Validar que existan los elementos necesarios
-        if (!informanteSelect || !variedadesSelect) {
-            throw new Error('Faltan elementos del formulario requeridos');
-        }
-        
-        // Obtener valores limpios
-        const informanteId = informanteSelect ? informanteSelect.value.trim() : null;
-        const variedadId = variedadesSelect ? variedadesSelect.value.trim() : null;
-        const fecha = fechaInput.value.trim() || new Date().toISOString().split('T')[0];
-        const resultado = resultadoSelect ? resultadoSelect.value.trim() : null;
-        const estado = estadoSelect ? estadoSelect.value.trim() : null;
-        const cantidad = cantidadInput ? Number.parseInt(cantidadInput.value.trim(), 10) : 0;
-        const precio = precioInput ? Number.parseFloat(precioInput.value.trim()) : 0;
-        const undm =  undmSelect.value.trim();
-        const tipomoneda = tipomonedaSelect ? tipomonedaSelect.value.trim() : null;
-        const peso = pesoInput ? Number.parseInt(pesoInput.value.trim(), 10) : 0;
-        const preciosustituido = preciosustituidoInput ? Number.parseFloat(preciosustituidoInput.value.trim()) : 0;
-        const nveces = nvecesInput ? Number.parseInt(nvecesInput.value.trim(), 10) : 0;
-        const oferta = ofertaActivo;
-        const descuento = descuentoActivo;
-        const porcentajedescuento = porcentajedescuentoInput ? Number.parseFloat(porcentajedescuentoInput.value.trim()) : 0;
-        const iva = ivaActivo;
-        const propina = propinaActivo;
-        const observaciones =  observacionesInput ? observacionesInput.value.trim() : '';
-
-        // Validar datos obligatorios
-        if (!informanteId || !variedadId) {
-            throw new Error('Debe seleccionar un informante y una variedad');
-        }
-        
-        // Crear objeto con datos a insertar
-        const seriePrecio = {
-            InformanteId: informanteId,
-            VariedadId: variedadId,
-            Fecha: fecha,
-            Resultado: resultado,
-            Estado: estado,
-            Cantidad: cantidad,
-            Precio: precio, // Valor por defecto - podría venir de otro campo
-            Undm: undm, 
-            TipoMoneda: tipomoneda,
-            Peso: peso,
-            PrecioSustituido: preciosustituido,
-            Nveces: nveces,
-            Oferta: oferta,
-            Descuento: descuento,
-            PorcentajeDescuento: porcentajedescuento,
-            Iva: iva,
-            Propina: propina,
-            Observaciones: observaciones
-            //Activo: true // Estado inicial
-        };
-        
-        // Conectar a la base de datos
-        const db = await IniciarBaseDatos();
-        
-        // Iniciar transacción
-        const transaction = db.transaction('SeriesPrecios', 'readwrite');
+        const db = await openDB();
+        const transaction = db.transaction(['SeriesPrecios'], 'readonly');
         const store = transaction.objectStore('SeriesPrecios');
-        
-        // Insertar registro
-        const request = store.put(seriePrecio);
-        
-        // Manejar éxito
-        request.onsuccess = () => {
-            console.log('Registro insertado/actualizado:', seriePrecio);
-            mostrarMensaje('Registro guardado exitosamente', 'success');
-            
-            // Opcional: Limpiar formulario o actualizar listados
-            if (variedadesSelect) {
-                variedadesSelect.selectedIndex = -1;
-            }
-            if (fechaInput && !fechaInput.readOnly) {
-                fechaInput.value = new Date().toISOString().split('T')[0];
-            }
-        };
-        
-        // Manejar errores
-        transaction.onerror = (event) => {
-            console.error('Error en transacción:', event.target.error);
-            mostrarMensaje(`Error al guardar: ${event.target.error.message}`, 'danger');
-        };
-        
-        // Completar transacción
-        await new Promise((resolve, reject) => {
-            transaction.oncomplete = resolve;
-            transaction.onerror = reject;
-        });
-        
-        return {
-            success: true,
-            message: 'Registro guardado exitosamente',
-            data: seriePrecio
-        };
+        const request = store.getAll();
 
-    } catch (error) {
-        console.error('Error en insertarSeriePrecio:', error);
-        mostrarMensaje(`Error: ${error.message}`, 'danger');
-        return {
-            success: false,
-            message: error.message
-        };
-    }
-}
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                // Filtro según el valor de obj
+                const registrosNoEnviados = request.result.filter(item => {
+                    const baseCondition = item.Enviado === false && item.EsPesable === obj;
 
-async function cargarSelect1(storeName, selectElement, keyField, displayField, sortField, filterField = null, filterValue = null) {
-    try {
-        const db = await IniciarBaseDatos();
-        const transaction = db.transaction(storeName, 'readonly');
-        const store = transaction.objectStore(storeName);
+                    if (!baseCondition) return false;
 
-        // ✅ Usar el índice si existe
-        let dataSource = store;
-        if (filterField && store.indexNames.contains(filterField)) {
-            dataSource = store.index(filterField);
-        }
-
-        // ✅ Usar getAll si hay filtro, o openCursor si no
-        const items = [];
-
-        if (!filterValue) {
-            // ✅ Usar getAll si hay valor de filtro
-            const getAllRequest = dataSource.getAll(filterValue);
-            
-            getAllRequest.onsuccess = () => {
-                const resultados = getAllRequest.result || [];
-                
-                resultados.sort((a, b) => a[sortField].localeCompare(b[sortField]));
-
-                selectElement.innerHTML = '';
-                if (resultados.length > 0) {
-                    for (const item of resultados) {
-                        const option = document.createElement('option');
-                        option.value = item[keyField];
-                        option.textContent = item[displayField];
-                        selectElement.appendChild(option);
-                        selectElement.selectedIndex = -1;
-                    }
-                } else {
-                    selectElement.innerHTML = '<option value="">No hay datos disponibles</option>';
-                }
-
-                $(selectElement).trigger('change');
-            };
-
-            getAllRequest.onerror = (e) => {
-                console.error("Error al obtener datos filtrados:", e.target.error);
-                selectElement.innerHTML = '<option value="">Error al cargar datos</option>';
-                $(selectElement).trigger('change');
-            };
-        } else {
-            // ❌ Si no hay filtro, seguir usando cursor para obtener todos
-            const cursorRequest = dataSource.openCursor();
-
-            cursorRequest.onsuccess = (event) => {
-                const cursor = event.target.result;
-                if (cursor) {
-                    const item = cursor.value;
-
-                    // ✅ Asegurarse de que el campo tenga el valor esperado
-                    if (!filterField || item[filterField] === filterValue) {
-                        items.push(item);
+                    // Si es pesable (obj === true), verificar que Peso sea válido
+                    if (obj === true) {
+                        return item.Peso === null ||  item.Peso > 0;
                     }
 
-                    cursor.continue();
-                } else {
-                    items.sort((a, b) => a[sortField].localeCompare(b[sortField]));
+                    return true; // Para obj === false, no hay más condiciones
+                });
 
-                    selectElement.innerHTML = '';
-                    if (items.length > 0) {
-                        for (const item of items) {
-                            const option = document.createElement('option');
-                            option.value = item[keyField];
-                            option.textContent = item[displayField];
-                            selectElement.appendChild(option);
-                            selectElement.selectedIndex = -1;
-                        }
-                    } //else {
-                      //  selectElement.innerHTML = '<option value="">No hay datos disponibles</option>';
-                    //}
+                // Mapeo de SeriesPrecios_
+                const SeriesPrecios = registrosNoEnviados.map(item => ({
+                    InformanteId: item.InformanteId,
+                    VariedadId: item.VariedadId,
+                    Anio: item.Anio,
+                    Mes: item.Mes,
+                    muestraid: item.muestraid,
+                    Semana: item.Semana,
+                    Fecha: item.Fecha,
+                    PrecioRecolectado: item.PrecioRecolectado,
+                    PrecioAnterior: item.PrecioAnterior,
+                    Peso: item.Peso,
+                    Cantidad: item.Cantidad,
+                    UnidadMedidaId: item.UnidadMedidaId,
+                    EsOferta: Boolean(item.EsOferta),
+                    TieneDescuento: Boolean(item.TieneDescuento),
+                    Descuento: item.Descuento,
+                    TieneIva: Boolean(item.TieneIva),
+                    TienePropina: Boolean(item.TienePropina),
+                    MonedaId: item.MonedaId,
+                    EstadoProductoId: item.EstadoProductoId,
+                    PrecioSustituidoR: item.PrecioSustituidoR,
+                    PrecioSustituidoC: item.PrecioSustituidoC,
+                    ObservacionEnumerador: item.ObservacionEnumerador,
+                    FechaCreacion: item.FechaCreacion,
+                    CreadoPor: item.CreadoPor
+                }));
 
-                    $(selectElement).trigger('change');
-                }
+                // Mapeo de Muestras
+                const Muestras = registrosNoEnviados.map(item => ({
+                    InformanteId: item.InformanteId,
+                    VariedadId: item.VariedadId,
+                    Nveces: item.Nveces
+                }));
+
+                // Creación de Informantes sin duplicados
+                const informantesMap = new Map();
+                registrosNoEnviados.forEach(item => {
+                    const codInformante = item.InformanteId;
+                    if (!informantesMap.has(codInformante)) {
+                        informantesMap.set(codInformante, {
+                            CodInformante: codInformante,
+                            NombreInformante: "",
+                            Direccion: "",
+                            DistritoId: "",
+                            Activo: true,
+                            CoordenadaX: item.CoordenadaX,
+                            CoordenadaY: item.CoordenadaY,
+                            IdEmpleado: item.CreadoPor
+                            // Anio: item.Anio,
+                            // Mes: item.Mes,
+                            // Semana: item.Semana
+                        });
+                    }
+                });
+
+                const Informantes = Array.from(informantesMap.values());
+
+                // Cerrar la conexión a la base de datos
+                db.close();
+
+                // Resolución del resultado
+                resolve({
+                    SeriesPrecios: SeriesPrecios,
+                    Muestras: Muestras,
+                    Informantes: Informantes
+                });
             };
 
-            cursorRequest.onerror = (e) => {
-                console.error("Error al abrir cursor:", e.target.error);
-                selectElement.innerHTML = '<option value="">Error al cargar datos</option>';
-                $(selectElement).trigger('change');
+            request.onerror = () => {
+                reject("Error al obtener los registros de SeriesPrecios");
             };
-        }
-
+        });
     } catch (error) {
-        console.error(`Error al cargar ${storeName}:`, error);
-        selectElement.innerHTML = '<option value="">Error de conexión</option>';
-        $(selectElement).trigger('change');
+        console.error("Error al abrir la base de datos:", error);
+        throw error;
     }
 }
 
-async function cargarSeriePrecio3(informanteId, variedadId) {
-    try {
-        // Validar que los parámetros sean válidos
-        if (!informanteId || !variedadId) {
-            throw new Error('Informante y Variedad son requeridos');
-        }
 
-        // Limpiar espacios en los valores
-        const cleanInformante = informanteId.trim();
-        const cleanVariedad = variedadId.trim();
 
-        // Abrir la base de datos
-        const db = await IniciarBaseDatos();
-        const transaction = db.transaction('SeriesPrecios', 'readonly');
-        const store = transaction.objectStore('SeriesPrecios');
 
-        // ✅ Verificar si existe el índice necesario
-        if (!store.indexNames.contains('BuscarPorInformanteYVariedad')) {
-            throw new Error('Índice BuscarPorInformanteYVariedad no encontrado');
-        }
 
-        // ✅ Usar índice y rango de clave para búsqueda directa
-        const index = store.index('BuscarPorInformanteYVariedad');
-        const keyRange = IDBKeyRange.only([cleanInformante, cleanVariedad]);
-        const cursorRequest = index.openCursor(keyRange);
+// async function jsonSeriesPreciosee(obj) {
+//     try {
+//         // Leer el archivo JSON desde la raíz del proyecto
+//         const response = await fetch('serieprecio.json');
 
-        //?const request = store.openCursor();
-        const resultados = [];
+//         // Verificar si la respuesta es exitosa
+//         if (!response.ok) {
+//             throw new Error(`Error al cargar el archivo: ${response.statusText}`);
+//         }
+
+//         // Convertir la respuesta a JSON
+//         const data = await response.json();
+       
+
+//         // Filtrar los registros según el valor de obj
+//         const registrosNoEnviados = data.filter(item => {
+//             const baseCondition = item.Enviado === false && item.EsPesable === obj;
+
+//             if (!baseCondition) return false;
+
+//             // Si es pesable (obj === true), verificar que Peso sea válido
+//             if (obj === true) {
+//                 return item.Peso === null || item.Peso > 0;
+//             }
+
+//             return true; // Para obj === false, no hay más condiciones
+//         });
+
+//         // Mapeo de SeriesPrecios
+//         const SeriesPrecios = registrosNoEnviados.map(item => ({
+//             InformanteId: item.InformanteId,
+//             VariedadId: item.VariedadId,
+//             Anio: item.Anio,
+//             Mes: item.Mes,
+//             muestraid: item.muestraid,
+//             Semana: item.Semana,
+//             Fecha: item.Fecha,
+//             PrecioRecolectado: item.PrecioRecolectado,
+//             PrecioAnterior: item.PrecioAnterior,
+//             Peso: item.Peso,
+//             Cantidad: item.Cantidad,
+//             UnidadMedidaId: item.UnidadMedidaId,
+//             EsOferta: Boolean(item.EsOferta),
+//             TieneDescuento: Boolean(item.TieneDescuento),
+//             Descuento: item.Descuento,
+//             TieneIva: Boolean(item.TieneIva),
+//             TienePropina: Boolean(item.TienePropina),
+//             MonedaId: item.MonedaId,
+//             EstadoProductoId: item.EstadoProductoId,
+//             PrecioSustituidoR: item.PrecioSustituidoR,
+//             PrecioSustituidoC: item.PrecioSustituidoC,
+//             ObservacionEnumerador: item.ObservacionEnumerador,
+//             FechaCreacion: item.FechaCreacion,
+//             CreadoPor: item.CreadoPor
+//         }));
+
+//         // Mapeo de Muestras
+//         const Muestras = registrosNoEnviados.map(item => ({
+//             InformanteId: item.InformanteId,
+//             VariedadId: item.VariedadId,
+//             Nveces: item.Nveces
+//         }));
+
+//         // Creación de Informantes sin duplicados
+//         const informantesMap = new Map();
+//         registrosNoEnviados.forEach(item => {
+//             const codInformante = item.InformanteId;
+//             if (!informantesMap.has(codInformante)) {
+//                 informantesMap.set(codInformante, {
+//                     CodInformante: codInformante,
+//                     NombreInformante: "",
+//                     Direccion: "",
+//                     DistritoId: "",
+//                     Activo: true,
+//                     CoordenadaX: item.CoordenadaX,
+//                     CoordenadaY: item.CoordenadaY,
+//                     IdEmpleado: item.CreadoPor
+//                 });
+//             }
+//         });
+
+//         const Informantes = Array.from(informantesMap.values());
+
+//         // Resolución del resultado
+//         return {
+//             SeriesPrecios: SeriesPrecios,
+//             Muestras: Muestras,
+//             Informantes: Informantes
+//         };
+//     } catch (error) {
+//         console.error("Error al obtener los datos:", error);
+//         throw error; // Re-lanzar el error para que pueda ser manejado por el llamador
+//     }
+// }
+
+// // Function para filtrar Muestra and cargar informantesSelect
+// async function filterAndPopulateInformantessindia() {
+//     const db = await IniciarBaseDatos();
+//     const transaction = db.transaction(['Muestra', 'Informantes'], 'readonly');
+//     const muestraStore = transaction.objectStore('Muestra');
+//     const informantesStore = transaction.objectStore('Informantes');
+
+//     const semanasSelect = document.getElementById('semanasSelect');
+//     const diasSelect = document.getElementById('diasSelect');
+//     const informantesSelect = document.getElementById('informantesSelect');
+
+//     const semanaKey = Number.parseInt(semanasSelect.value, 10);
+//     const diaValue = diasSelect.value; // e.g. "1"
     
-        //?request.onsuccess = (event) => {
-        cursorRequest.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                // Agregar el registro encontrado
-                resultados.push(cursor.value);                
+//     if (!semanaKey) {
+//         mostrarMensaje('Por favor seleccione una Semana.', "error");
+//         return;
+//     }
+//     if (!diaValue) {
+//         mostrarMensaje('Por favor seleccione un Día.', "error");
+//         return;
+//     }
 
-                //? const record = cursor.value;
+//     // filtrar Muestra donde el campo corresponde a semanaKey  true y diaSemanaId matches diaValue
+//     const filteredMuestra = [];
+
+//     // Use a promise para esperar la iteracion cursor
+//     await new Promise((resolve, reject) => {
+//         const request = muestraStore.openCursor();
+//         request.onsuccess = (event) => {
+//             const cursor = event.target.result;
+//             if (cursor) {
+//                 const muestra = cursor.value;
+//                 // if (muestra[semanaKey] === true && muestra.diaSemanaId === diaValue) {
+//                 if (muestra.Semana === semanaKey && muestra.DiaSemanaId === diaValue) {
+//                     filteredMuestra.push(muestra);
+//                 }
+//                 cursor.continue();
+//             } else {
+//                 resolve();
+//             }
+//         };
+//         request.onerror = (event) => {
+//             reject(event.target.error);
+//         };
+//     });
+
+//     // obtener unicos informanteIds de  Muestra filtrada
+//     const informanteIds = [...new Set(filteredMuestra.map(m => m.InformanteId))];
+//     // Fetch todos Informantes de Informantes 
+//     const allInformantes = await new Promise((resolve, reject) => {
+//         const informantes = [];
+//         const req = informantesStore.openCursor();
+//         req.onsuccess = (event) => {
+//             const cursor = event.target.result;
+//             if (cursor) {
+//                 //informantes.push(cursor.value);
+//                 const informante = cursor.value;
+//                 // Filtrar informantes que coincidan con la semanaKey
+//                 if (informante.Semana === semanaKey) {
+//                     informantes.push(informante);
+//                 }
+//                 cursor.continue();
+//             } else {
+//                 resolve(informantes);
+//             }
+//         };
+//         req.onerror = (event) => {
+//             reject(event.target.error);
+//         };
+//     });
+
+//     // filtrar Informantes que match con informanteIds
+//     const filteredInformantes = allInformantes.filter(informante =>
+//         informanteIds.includes(informante.CodInformante)
+//     );
+
+    
+
+//     // limpiar el select
+//     informantesSelect.innerHTML = '<option value="" disabled selected>Seleccione Informante</option>';
+
+//     // cargar informantesSelect con informantes filtrados
+//     if (filteredInformantes.length > 0) {
+//         for (const { CodInformante, NombreInformante } of filteredInformantes) {
+//             const option = document.createElement('option');
+//             option.value = CodInformante;
+//             option.textContent = NombreInformante;
+//             informantesSelect.appendChild(option);
+//         }
+//     } else {
+//         const option = document.createElement('option');
+//         option.value = "";
+//         option.textContent = "No hay informantes disponibles";
+//         option.disabled = true;
+//         informantesSelect.appendChild(option);
+//     }
+// }
+
+// async function marcarInformantesConDatosHoy1() {
+//     const db = await openDB();
+//     const informantesSelect = $('#informantesSelect'); // Usamos jQuery para select2
+
+//     // Obtener fecha de hoy en formato ISO
+//     const hoy = new Date();
+//     const hoyStr = hoy.toISOString().split('T')[0]; // "YYYY-MM-DD"
+//     const fechaInicio = hoyStr + 'T00:00:00';
+//     const fechaFin = hoyStr + 'T23:59:59';
+
+//     const informantesHoy = new Set();
+
+//     const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+//     const almacenSeries = transaction.objectStore('SeriesPrecios');
+//     const index = almacenSeries.index('BuscarPorFechaCreacion');
+//     const fechaRango = IDBKeyRange.bound(fechaInicio, fechaFin);
+//     const cursorRequest = index.openCursor(fechaRango);
+
+//     cursorRequest.onsuccess = function(event) {
+//         const cursor = event.target.result;
+//         if (cursor) {
+//             const registro = cursor.value;
+//             const informanteId = registro.InformanteId;
+
+//             if (informanteId !== undefined) {
+//                 informantesHoy.add(informanteId);
+//             }
+
+//             cursor.continue(); // Continuar al siguiente
+//         } else {
+//             // cursor terminando => inicializar select2 con plantilla personalizada
+//             inicializarSelect2ConMarcacion(informantesSelect, informantesHoy);
+//             //actualizarSelect2(informantesSelect, informantesHoy);
+//         }
+//     };
+
+//     cursorRequest.onerror = function(event) {
+//         console.error("Error al leer los datos de SeriesPrecios:", event.target.error);
+//     };
+// }
+
+// async function InsertarRegistroNoRealizadosindia() {
+//     try {
+//         // Paso 1: Abrir base de datos
+//         const db = await openDB();
+
+//         const informanteSelect = document.getElementById('informantesSelect');
+//         const informanteId = validarCampoTexto(informanteSelect.value, 'Informante');
+
+//         // Paso 2: Buscar todas las VariedadId asociadas al InformanteId en "Muestra"
+//         const transactionMuestra = db.transaction("Muestra", "readonly");
+//         const storeMuestra = transactionMuestra.objectStore("Muestra");
+//         const indexMuestra = storeMuestra.index("BuscarxInformante"); // Índice para filtrar por InformanteId
+//         const request = indexMuestra.getAll(IDBKeyRange.only(informanteId));
+
+//         const registrosMuestra = await new Promise((resolve, reject) => {
+//             request.onsuccess = () => resolve(
+//                 request.result.map(m => ({
+//                     VariedadId: m.VariedadId,
+//                     Fecha: m.Fecha,
+//                     muestraid : m.muestraid,
+//                     PrecioRecolectadoAnt: m.PrecioRecolectadoAnt,
+//                     EsPesable: m.EsPesable,
+//                     Nveces: m.Nveces
+//                 }))
+//             );
+//             request.onerror = () => reject("Error al obtener los registros de Muestra");
+//         });
+
+//         if (registrosMuestra.length === 0) {
+//             throw new Error("No se encontraron registros en Muestra para este Informante.");
+//         }
+
+//         // Eliminar duplicados basados en VariedadId (opcional según tu lógica)
+//         const variedadesUnicasMap = new Map();
+//         for (const registro of registrosMuestra) {
+//             if (!variedadesUnicasMap.has(registro.VariedadId)) {
+//                 variedadesUnicasMap.set(registro.VariedadId, registro);
+//             }
+//         }
+//         const variedadesUnicas = Array.from(variedadesUnicasMap.values());
+
+//         // Configuración común desde formulario
+//         const semanaSelect = document.getElementById('semanasSelect');
+//         const diasSelect = document.getElementById('diasSelect');        
+//         const fechaInput = document.getElementById('fechaInput') || { value: new Date().toISOString().split('T')[0] };
+//         const usuarioInput = document.getElementById('hidden-usuarioId');
+
+//         const semana = Number.parseInt(semanaSelect.value);
+//         const dia = validarCampoTexto(diasSelect.value);  
+//         const anio = Number.parseInt(document.getElementById('anio').value, 10);
+//         const mes = Number.parseInt(document.getElementById('mes').value, 10);        
+//         const cantidad = Number.parseInt(1);
+//         const precio = Number.parseFloat(0);
+//         const undm = null;
+//         const tipomoneda = null;
+//         const peso = null;
+//         const preciosustituido = null;
+//         const porcentajedescuento = null;
+//         const observaciones = null;
+//         const usuario = validarCampoTexto(usuarioInput?.value, 'Usuario');
+//         const oferta = null; // Asumiendo valores booleanos fijos
+//         const descuento = null;
+//         const iva = null;
+//         const propina = null;
+
+//         const fecha = validarFecha(fechaInput.value.trim(), 'Fecha');
+//         const resultado = Number.parseInt(2);
+//         const estado = Number.parseInt(0);
+
+//         // Paso 3: Insertar en "SeriesPrecios" para cada registro
+//         const transactionSeries = db.transaction("SeriesPrecios", "readwrite");
+//         const storeSeries = transactionSeries.objectStore("SeriesPrecios");
+
+//         for (const registro of variedadesUnicas) {
+//             const seriePrecio = {
+//                 InformanteId: informanteId,
+//                 VariedadId: registro.VariedadId,
+//                 Anio: anio,
+//                 Mes: mes,
+//                 Dia: dia,
+//                 muestraid : registro.muestraid,
+//                 Semana: semana,
+//                 Fecha: registro.Fecha,
+//                 PrecioRecolectado: precio,
+//                 //PrecioAnterior: Number.parseFloat(registro.PrecioRecolectadoAnt),
+//                 EsPesable: Boolean(registro.EsPesable),
+//                 Peso: peso,
+//                 Cantidad: cantidad,
+//                 UnidadMedidaId: undm,
+//                 EsOferta: oferta,
+//                 TieneDescuento: descuento,
+//                 Descuento: porcentajedescuento,
+//                 TieneIva: iva,
+//                 TienePropina: propina,
+//                 MonedaId: tipomoneda,
+//                 EstadoProductoId: estado,
+//                 PrecioSustituidoR: preciosustituido,
+//                 PrecioSustituidoC: null,
+//                 ObservacionEnumerador: observaciones,
+//                 FechaCreacion: fecha,
+//                 CreadoPor: usuario,
+//                 Resultado: resultado,
+//                 Nveces: Number.parseInt(registro.Nveces) + 1,
+//                 Enviado: false,
+//                 CoordenadaX: Number.parseFloat($("#lblLongitud").val()),
+//                 CoordenadaY: Number.parseFloat($("#lblLatitud").val())
+//             };
+            
+//             const requestPut = storeSeries.put(seriePrecio);
+            
+//             await new Promise((resolve, reject) => {
+//                 requestPut.onsuccess = resolve;
+//                 requestPut.onerror = () => reject(requestPut.error);
+//             });
+//         }       
+
+//         // Esperar completación de transacción
+//         await new Promise((resolve, reject) => {
+//             transactionSeries.oncomplete = resolve;
+//             transactionSeries.onerror = () => reject(transactionSeries.error);
+//         });
+
+//         mostrarMensaje('Registros guardados exitosamente', 'success');
+//         let delay = alertify.get('notifier','delay');
+//             alertify.set('notifier','delay', 2);  
+//             alertify.set('notifier','position', 'bottom-center');
+//             alertify.success('Registros guardados exitosamente');
+//             alertify.set('notifier','delay', delay);
+//         // alertify.set('notifier','position', 'bottom-center');
+//         // alertify.success('Registros guardados exitosamente');
+//         return {
+//             success: true,
+//             message: `Se insertaron ${variedadesUnicas.length} registros.`,
+//         };
+
+//     } catch (error) {
+//         console.error('Error en InsertarRegistroNoRealizado:', error);
+//         mostrarMensaje(`Error: ${error.message}`, 'danger');
+//         let delay = alertify.get('notifier','delay');
+//             alertify.set('notifier','delay', 2);  
+//             alertify.set('notifier','position', 'bottom-center');
+//             alertify.error(`Error: ${error.message}`);
+//             alertify.set('notifier','delay', delay);
+//         return {
+//             success: false,
+//             message: error.message
+//         };
+//     }
+// }
+
+// function validarNumero2(valor, nombreCampo, esRequerido = false) {
+//     // Verificar si el valor es una cadena vacía
+//     if (esRequerido && (!valor || valor.trim() === '')) {
+//         throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
+//     }
+//     const valorNumerico = Number(valor?.trim());
+//     // Validar si el valor no es un número o es negativo
+//     if (Number.isNaN(valorNumerico) || (esRequerido && valorNumerico < 0)) {
+//         if (esRequerido) {
+//             throw new Error(`${nombreCampo} es obligatorio y debe ser un número positivo`);
+//         }
+//         return 0; // Valor por defecto para campos no requeridos
+//     }
+    
+//     return valorNumerico;
+// }
+
+// function limpiarFormulario() {
+//     // Reiniciar selects
+//     const selects = [
+//         'informantesSelect',
+//         'variedadesSelect',
+//         'resultadoSelect',
+//         'estadoSelect',
+//         'undmSelect',
+//         'tipomonedaSelect'
+//     ];
+
+//     for (const id of selects) {
+//         const select = document.getElementById(id);
+//         if (select) select.selectedIndex = -1;
+//     }
+
+//     // Reiniciar inputs numéricos y de texto
+//     const inputsLimpiar = [
+//         'fechaa',
+//         'precioa',
+//         'espesable',
+//         'detalle',
+//         'cantidadInput',
+//         'precioInput',
+//         'pesoInput',
+//         'preciosustituidoInput',
+//         'nvecesInput',
+//         'porcentajedescuentoInput',
+//         'observacionesInput'
+//     ];
+
+//     for (const id of inputsLimpiar) {
+//         const input = document.getElementById(id);
+//         if (input) {
+//             input.value = '';
+//             if (input.type === 'number') {
+//                 input.value = 0;
+//             }
+//         }
+//     }
+
+//     // Reiniciar checkboxes
+//     const checkboxes = [
+//         '#ofertachk input[type="checkbox"]',
+//         '#descuentochk input[type="checkbox"]',
+//         '#ivachk input[type="checkbox"]',
+//         '#propinachk input[type="checkbox"]'
+//     ];
+
+//     for (const selector of checkboxes) {
+//         for (const checkbox of $(selector)) {
+//             $(checkbox).prop('checked', false);
+//         }
+//     }
+
+//     // Reiniciar fecha (si no es de solo lectura)
+//     const fechaInput = document.getElementById('fechaInput');    
+//     if (fechaInput && !fechaInput.readOnly) {
+//         fechaInput.value = new Date().toISOString().split('T')[0];
+//     }
+
+//     // Enfocar primer campo
+//     const primerCampo = document.getElementById('variedadesSelect');
+//     if (primerCampo) primerCampo.focus();
+
+//     mostrarMensaje('Formulario limpiado para nuevo registro', 'info');
+// }
+
+// async function cargarSeriePrecio2(informanteId, variedadId) {
+//     try {
+//         // Validar que los parámetros sean válidos
+//         if (!informanteId || !variedadId) {
+//             throw new Error('Informante y Variedad son requeridos');
+//         }
+
+//         // Limpiar espacios en los valores
+//         const cleanInformante = informanteId.trim();
+//         const cleanVariedad = variedadId.trim();
+
+//         // Abrir la base de datos
+//         const db = await IniciarBaseDatos();
+//         const transaction = db.transaction('SeriesPrecios', 'readonly');
+//         const store = transaction.objectStore('SeriesPrecios');
+
+//         // ✅ Verificar si existe el índice necesario
+//         if (!store.indexNames.contains('BuscarPorInformanteYVariedad')) {
+//             throw new Error('Índice BuscarPorInformanteYVariedad no encontrado');
+//         }
+
+//         // ✅ Usar índice y rango de clave para búsqueda directa
+//         const index = store.index('BuscarPorInformanteYVariedad');
+//         const keyRange = IDBKeyRange.only([cleanInformante, cleanVariedad]);
+//         const cursorRequest = index.openCursor(keyRange);
+
+//         const resultados = [];
+    
+//         cursorRequest.onsuccess = (event) => {
+//             const cursor = event.target.result;
+//             if (cursor) {
+//                 // Agregar el registro encontrado
+//                 resultados.push(cursor.value);
+//                 cursor.continue();
+//             } else {
+//                 // Procesar resultados
+//                 if (resultados.length > 0) {
+//                     rellenarFormulario(resultados[0]); 
+//                 } else {
+//                     // No hay registros
+//                     limpiarVariedadDetalle("editar");
+//                     mostrarMensaje("No se ha ingresado Serie Precio", "warning");
+//                 }
+//             }
+//         };
+
+//         cursorRequest.onerror = (event) => {
+//             console.error('Error al buscar en SeriesPrecios:', event.target.error);
+//             mostrarMensaje(`Error al buscar serie de precio: ${event.target.error.message}`, "danger");
+//         };
+
+//     } catch (error) {
+//         console.error('Error en cargarSeriePrecio:', error);
+//         mostrarMensaje(`Error al procesar los datos: ${error.message}`, "danger");
+//     }
+// }
+
+// async function mostrarDiferenciassindia(informanteId, semana) {
+//     try {
+//         const db = await IniciarBaseDatos();
+        
+//         // 1. Obtener todas las variedades del informante desde Muestra
+//         const muestraMap = new Map(); // VariedadId -> descripcion
+//         const muestraTransaction = db.transaction('Muestra', 'readonly');
+//         const muestraStore = muestraTransaction.objectStore('Muestra');
+//         //! const muestraCursorRequest = muestraStore.openCursor();
+       
+//         const index = muestraStore.index('BuscarxInfSem');
+
+//         const request = index.getAll([String(informanteId), Number.parseInt(semana),]);
+
+//         request.onsuccess = function(event) {
+//             const results = event.target.result;
+            
+//             if (results.length > 0) {
+//                 // Procesar los resultados
+//                 results.forEach(registro => {
+//                     muestraMap.set(registro.VariedadId, registro.Descripcion);
+//                 });
+//             } else {
+//                 console.warn('No se encontraron registros para la combinación Informante y Semana');
+//             }
+//         };
+
+//         // 2. Construir mapa de descripciones de Muestra
+//         // await new Promise((resolve, reject) => {
+//         //     muestraCursorRequest.onsuccess = (event) => {
+//         //         const cursor = event.target.result;
+//         //         if (cursor) {
+//         //             if (cursor.key[0] === informanteId.trim()) {
+//         //                 muestraMap.set(cursor.key[1], cursor.value.Descripcion);
+//         //             }
+//         //             cursor.continue();
+//         //         } else {
+//         //             resolve();
+//         //         }
+//         //     };
+//         //     muestraCursorRequest.onerror = reject;
+//         // });
+
+//         // 3. Obtener todas las variedades ya registradas en SeriesPrecios
+//         const seriesSet = new Set();
+//         const seriesTransaction = db.transaction('SeriesPrecios', 'readonly');
+//         const seriesIndex = seriesTransaction.objectStore('SeriesPrecios').index('BuscarPorInformanteYVariedad');
+//         // ✅ Usar IDBKeyRange.bound() para buscar todas las VariedadId para este InformanteId
+//         const keyRange = IDBKeyRange.bound(
+//             [informanteId.trim(), ''], 
+//             [informanteId.trim(), '\uffff']
+//         );
+        
+//         const seriesCursorRequest = seriesIndex.openCursor(keyRange);
+
+//         // 4. Llenar el Set con las variedades ya registradas
+//         await new Promise((resolve, reject) => {
+//             seriesCursorRequest.onsuccess = (event) => {
+//                 const cursor = event.target.result;
+//                 if (cursor) {
+//                     // El keyPath es ['InformanteId', 'VariedadId', 'Fecha'], pero el índice solo tiene ['InformanteId', 'VariedadId']
+//                     const variedadId = cursor.key[1]; 
+//                     if (variedadId) seriesSet.add(variedadId.trim());
+//                     cursor.continue();
+//                 } else {
+//                     resolve();
+//                 }
+//             };
+//             seriesCursorRequest.onerror = reject;
+//         });        
+        
+//         // 5. Encontrar las faltantes comparando con Muestra
+//         const faltantes = [...muestraMap.keys()].filter(id => !seriesSet.has(id));
+//         // 6. Mostrar listado de faltantes
+//         mostrarListadoFaltantes(faltantes, muestraMap);
+        
+//         // 7. Resaltar opciones en variedadesSelect
+//         //resaltarFaltantes(faltantes);
+
+//     } catch (error) {
+//         console.error('Error al mostrar diferencias:', error);
+//         mostrarMensaje(`Error al comparar registros: ${error.message}`, "danger");
+//     }
+// }
+
+// async function marcarVariedadesConDatossindia() {
+//     const db = await openDB();
+//     const informantesSelect = $('#informantesSelect').val(); // Usamos jQuery para select2
+//     let semanaSelect = $('#semanasSelect').val();
+//     semanaSelect = Number.parseInt(semanaSelect);
+//     const variedadesSelect = $('#variedadesSelect')
+
+//     const variedadesHoy = new Set();
+
+//     const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+//     const almacenSeries = transaction.objectStore('SeriesPrecios');
+//     const index = almacenSeries.index('BuscarxInfSem');
+//     const Rango = IDBKeyRange.bound([informantesSelect, semanaSelect], [informantesSelect, semanaSelect]);
+
+//     const cursorRequest = index.openCursor(Rango);
+
+//     cursorRequest.onsuccess = function(event) {
+//         const cursor = event.target.result;
+//         if (cursor) {
+//             const registro = cursor.value;
+//             const variedadId = registro.VariedadId;
+
+//             if (variedadId !== undefined) {
+//                 variedadesHoy.add(variedadId);
+//             }
+
+//             cursor.continue(); // Continuar al siguiente
+//         } else {
+//             // cursor terminando => inicializar select2 con plantilla personalizada
+//             inicializarSelect2ConMarcacion(variedadesSelect, variedadesHoy);
+//         }
+//     };
+
+//     cursorRequest.onerror = function(event) {
+//         console.error("Error al leer los datos de SeriesPrecios:", event.target.error);
+//     };
+// }
+
+// function actualizarSelect2(selectElement, informantesHoy) {
+//     // Iterar sobre las opciones del select2
+//     selectElement.find('option').each(function() {
+//         const optionValue = $(this).val();
+//         const tieneDatosHoy = informantesHoy.has(optionValue);
+//         // Cambiar el color de fondo y el título
+//         $(this).toggleClass('informante-datos-hoy', tieneDatosHoy);
+//         $(this).attr('title', tieneDatosHoy ? "Este informante tiene datos hoy" : "");
+//     });
+//     // Actualizar el select2 para reflejar los cambios
+//     selectElement.select2(); // Re-inicializar select2 para aplicar cambios
+// }
+
+// async function jsonSeriesPrecios1(obj) {
+//     try {
+//         const db = await openDB();
+//         const transaction = db.transaction(['SeriesPrecios'], 'readonly');
+//         const store = transaction.objectStore('SeriesPrecios');
+//         const request = store.getAll();
+
+//         return new Promise((resolve, reject) => {
+//             request.onsuccess = () => {
+//                 // Filtrar los registros que no han sido enviados y que son no pesables
+//                 const registrosNoEnviados = request.result.filter(item => 
+//                     item.Enviado === true   && item.EsPesable === obj
+//                 );  
+
+//                 const SeriesPrecios_ = registrosNoEnviados.map(item => ({
+//                     InformanteId: item.InformanteId,
+//                     VariedadId: item.VariedadId,
+//                     Anio: item.Anio,
+//                     Mes: item.Mes,
+//                     muestraid : item.muestraid,
+//                     Semana: item.Semana,
+//                     Fecha: item.Fecha,
+//                     PrecioRecolectado: item.PrecioRecolectado,
+//                     PrecioAnterior: item.PrecioAnterior,
+//                     Peso: item.Peso,
+//                     Cantidad: item.Cantidad,
+//                     UnidadMedidaId: item.UnidadMedidaId,
+//                     EsOferta: Boolean(item.EsOferta),
+//                     TieneDescuento: Boolean(item.TieneDescuento),
+//                     Descuento: item.Descuento,
+//                     TieneIva: Boolean(item.TieneIva),
+//                     TienePropina: Boolean(item.TienePropina),
+//                     MonedaId: item.MonedaId,
+//                     EstadoProductoId: item.EstadoProductoId,
+//                     PrecioSustituidoR: item.PrecioSustituidoR,
+//                     PrecioSustituidoC: item.PrecioSustituidoC,
+//                     ObservacionEnumerador: item.ObservacionEnumerador,
+//                     FechaCreacion: item.FechaCreacion,
+//                     CreadoPor: item.CreadoPor                    
+//                 }));
+
+//                 const Muestras = registrosNoEnviados.map(item => ({
+//                     InformanteId: item.InformanteId,
+//                     VariedadId: item.VariedadId,
+//                     Nveces : item.Nveces
+//                 }));
+
+//                 // Usamos un Set para evitar duplicados por CodInformante
+//                 const informantesMap = new Map();
+//                 registrosNoEnviados.forEach(item => {
+//                     const codInformante = item.InformanteId;
+//                     if (!informantesMap.has(codInformante)) {
+//                         informantesMap.set(codInformante, {
+//                             CodInformante: codInformante,
+//                             NombreInformante: "",
+//                             Direccion: "",
+//                             Activo: true,
+//                             CoordenadaX: item.CoordenadaX,
+//                             CoordenadaY: item.CoordenadaY
+//                         });
+//                     }
+//                 });
+
+//                 const Informantes = Array.from(informantesMap.values());
+
+//                 resolve({
+//                     SeriesPrecios_: SeriesPrecios_,
+//                     Muestras: Muestras,
+//                     Informantes: Informantes
+//                 });
+//             };
+
+//             request.onerror = () => {
+//                 reject("Error al obtener los registros de SeriesPrecios");
+//             };
+//         });
+//     } catch (error) {
+//         console.error("Error al abrir la base de datos:", error);
+//         throw error;
+//     }
+// }
+
+// function getInformante2(db, informanteId) {
+//   return new Promise((resolve, reject) => {
+//     const tx = db.transaction('Informantes', 'readonly');
+//     const store = tx.objectStore('Informantes');
+//     const index = store.index('BuscarInformante');
+//     const req = index.getAll(String(informanteId)); // Obtener todos los registros que coincidan
+
+//     req.onsuccess = () => resolve(req.result);
+//     req.onerror = () => reject(req.error);
+//   });
+// }
+
+// function getInformantesindia(db, informanteId, semana) {
+//   return new Promise((resolve, reject) => {
+//     const tx = db.transaction('Informantes', 'readonly');
+//     const store = tx.objectStore('Informantes');
+    
+//     // Crear el array clave según el keyPath definido ['CodInformante', 'Semana']
+//     const key = [String(informanteId), Number.parseInt(semana)];
+//     const req = store.get(key);
+//     req.onsuccess = () => {
+//       resolve(req.result);
+//     };
+    
+//     req.onerror = () => {
+//       reject(req.error);
+//     };
+//   });
+// }
+
+// function getVariedadsindia(db, variedadId, informanteId) {
+//   return new Promise((resolve, reject) => {
+//     const tx = db.transaction('Variedades', 'readonly');
+//     const store = tx.objectStore('Variedades');
+//     // Forzar ambos valores a ser strings y mantener el formato esperado
+//     const key = [String(variedadId), String(informanteId)];
+//     const req = store.get(key);
+
+//     req.onsuccess = () => resolve(req.result);
+//     req.onerror = () => reject(req.error);
+//   });
+// }
+
+// // evalua el numerador del informante y devuelve su cantidad
+// async function actualizarCantidad(informanteId) {
+//     const db = await IniciarBaseDatos();
+//     return new Promise((resolve, reject) => {       
+//         const transaction = db.transaction('Numerador', 'readonly');
+//         const store = transaction.objectStore('Numerador');
+
+//         const requestGet = store.get(informanteId);
+
+//         requestGet.onerror = (event) => {
+//             reject(event.target.error);
+//         };
+
+//         requestGet.onsuccess = (event) => {
+//             const record = event.target.result;
+//             if (record) {
+//                 // encontrado, incrementa cantidad
+//                 record.cantidad = (record.cantidad || 0) + 1;
+//                 resolve(record.cantidad);
+//             } else {
+//                 // no encontrado,  cantidad=1
+//                 resolve(1);
+//             }
+//         };
+//     });
+// }
+
+// // Función para obtener una muestra por ID
+// async function getMuestraById(id) {
+//     const db = await IniciarBaseDatos();
+//     const transaction = db.transaction('Muestra', 'readonly');
+//     const store = transaction.objectStore('Muestra');
+//     const request = store.get(id);
+
+//     return new Promise((resolve, reject) => {
+//         request.onsuccess = () => resolve(request.result);
+//         request.onerror = () => reject('Error al obtener la muestra');
+//     });
+// }
+
+// // Función que se llama desde el botón de cada fila
+// async function SeleccionarMuestra(muestraId) {
+//     if (!muestraId) {
+//         console.error('ID de muestra no válido');
+//         return;
+//     }
+
+//     try {
+//         const muestra = await getMuestraById(muestraId);
+//         const detalleDiv = document.getElementById('muestrasDetalle');
+
+//         // Plantilla de detalle con formulario editable
+//         detalleDiv.innerHTML = `
+//             <div class="card">
+//                 <div class="card-header bg-primary text-white">
+//                     Detalle de Muestra
+//                 </div>
+//                 <div class="card-body">
+//                     <div class="mb-3">
+//                         <label for="muestraid" class="form-label">ID de la Muestra:</label>
+//                         <input type="text" class="form-control" id="muestraid" value="${muestra.id}" disabled>
+//                     </div>
+//                     <div class="mb-3">
+//                         <label for="detalle" class="form-label">Detalle:</label>
+//                         <input type="text" class="form-control" id="detalle" value="${muestra.detalle || ''}">
+//                     </div>
+//                     <div class="mb-3">
+//                         <label for="sem1" class="form-label">Sem1:</label>
+//                         <select id="sem1" class="form-select">
+//                             <option value="true" ${muestra.sem1 === true ? 'selected' : ''}>Activo</option>
+//                             <option value="false" ${muestra.sem1 === false ? 'selected' : ''}>Inactivo</option>
+//                         </select>
+//                     </div>
+//                     <div class="mb-3">
+//                         <label for="nveces" class="form-label">nveces:</label>
+//                         <input type="text" class="form-control" id="nveces" value="${muestra.nveces}">
+//                     </div>
+//                     <div class="d-grid gap-2 mt-3">
+//                         <button class="btn btn-success btn-sm" onclick="actualizarMuestra('${muestra.id}')">
+//                             <i class="bi bi-save"></i> Actualizar Muestra
+//                         </button>
+//                     </div>
+//                 </div>
+//             </div>
+//         `;
+//     } catch (error) {
+//         console.error('Error al cargar los datos:', error);
+//         document.getElementById('muestrasDetalle').innerHTML = `
+//             <div class="alert alert-danger" role="alert">
+//                 No se pudo cargar el detalle de la muestra.
+//             </div>
+//         `;
+//     }
+// }
+
+// // Función para actualizar la muestra
+// async function actualizarMuestra(id) {
+//     try {
+//         if (!id || id.trim() === '') {
+//             alert('ID de muestra no válido');
+//             return;
+//         }
+
+//         const detalleDiv = document.getElementById('muestrasDetalle');
+//         const detalle = $("#detalle").val(); //? document.getElementById('detalle').value;
+//         const sem1 = $("#sem1").val();
+//         const nveces = $("#nveces").val();
+//         const usuario = $("#hidden-usuarioId").val();
+//         const lng = $("#lblLongitud").val();
+//         const lat = $("#lblLatitud").val();
+
+//         const db = await IniciarBaseDatos();
+//         const transaction = db.transaction('Muestra', 'readwrite');
+//         const store = transaction.objectStore('Muestra');
+        
+//         // Obtener el registro actual
+//         const idNumerico = Number(id);
+//         const request = store.get(idNumerico);
+        
+//         request.onsuccess = async () => {
+            
+//             // Obtener el registro actual
+//             const registroActualizado = request.result;
+//             // 🔍 Validación: Si no se encuentra el registro
+//             if (!registroActualizado) {
+//                 alert('No se encontró el registro para actualizar');
+//                 return;
+//             }
+            
+//             // Actualizar solo los campos editables
+//             registroActualizado.detalle = detalle;
+//             registroActualizado.sem1 = sem1;
+//             registroActualizado.nveces = nveces;
+//             registroActualizado.usuario = usuario;
+//             registroActualizado.lng = lng;
+//             registroActualizado.lat = lat;
+            
+//             // Guardar cambios
+//             const putRequest = store.put(registroActualizado);
+            
+//             putRequest.onsuccess = () => {
+//                 mostrarMensaje('Muestra actualizada correctamente', "success");
                 
-                //? Filtrar manualmente por InformanteId y VariedadId
-                //?if (record.InformanteId === cleanInformante && record.VariedadId === cleanVariedad) {
-                //?    resultados.push(record);
-                //? }
-                cursor.continue();
-            } else {
-                // Procesar resultados
-                if (resultados.length > 0) {
-                    rellenarFormulario(resultados[0]); 
-                    //? Seleccionar el registro más reciente por fecha
-                    //? const registroMasReciente = resultados.reduce((latest, current) => {
-                    //?    return new Date(current.Fecha) > new Date(latest.Fecha) ? current : latest;
-                    //? });
+//                 // Refrescar la tabla con los mismos filtros
+//                 detalleDiv.innerHTML = '';
+//                 const informanteId = document.getElementById('informantesSelect').value;
+//                 const variedadId = document.getElementById('variedadesSelect').value;
+//                 const semanaId = document.getElementById('semanaSelect').value;
+//                 filtrarMuestras(informanteId, variedadId, semanaId, diaId);
+//             };
+            
+//             putRequest.onerror = () => {
+//                 alert('Error al actualizar la muestra');
+//             };
+//         };
+        
+//         request.onerror = () => {
+//             alert('Error al obtener la muestra para actualizar');
+//         };
+        
+//     } catch (error) {
+//         console.error('Error al actualizar la muestra:', error);
+//         alert('Ocurrió un error al guardar los cambios');
+//     }
+// }
+
+// async function actualizarNveces() {
+//     const informanteId = "11-1000016";
+//     const variedadId = "011420403";
+//     const fecha = "2025-05-06T00:00:00"; // Asegúrate que coincida exactamente con el formato almacenado
+
+//     try {
+//         const db = await openDB(); // Usamos la función auxiliar definida antes
+//         const transaction = db.transaction(["SeriesPrecios"], "readwrite");
+//         const store = transaction.objectStore("SeriesPrecios");
+
+//         // 1. Obtener el registro por clave compuesta
+//         const keyPath = [informanteId, variedadId, fecha];
+//         const getRequest = store.get(keyPath);
+
+//         const item = await new Promise((resolve, reject) => {
+//             getRequest.onsuccess = () => resolve(getRequest.result);
+//             getRequest.onerror = () => reject("Error al obtener el registro.");
+//         });
+
+//         if (!item) {
+//             throw new Error("Registro no encontrado.");
+//         }
+
+//         // 2. Actualizar el campo Nveces
+//         //item.Nveces = 0;
+//         item.Enviado = false;
+
+//         // 3. Guardar el registro actualizado
+//         const putRequest = store.put(item);
+
+//         await new Promise((resolve, reject) => {
+//             putRequest.onsuccess = () => resolve();
+//             putRequest.onerror = () => reject("Error al guardar el registro actualizado.");
+//         });
+
+//         console.log("Registro actualizado exitosamente.");
+//     } catch (error) {
+//         console.error("Error al actualizar el registro:", error);
+//     }
+// }
+
+// async function actualizarNveces2() {
+//     try {
+//         const db = await openDB(); // Usamos la función auxiliar definida antes
+//         const transaction = db.transaction(["SeriesPrecios"], "readwrite");
+//         const store = transaction.objectStore("SeriesPrecios");
+
+//         // 1. Obtener todos los registros
+//         const getAllRequest = store.getAll();
+
+//         const items = await new Promise((resolve, reject) => {
+//             getAllRequest.onsuccess = () => resolve(getAllRequest.result);
+//             getAllRequest.onerror = () => reject("Error al obtener los registros.");
+//         });
+
+//         if (!items || items.length === 0) {
+//             throw new Error("No se encontraron registros.");
+//         }
+
+//         // 2. Actualizar el campo deseado en todos los registros
+//         items.forEach(item => {
+//             item.Enviado = false; // Actualiza el campo Enviado a false
+//             // Puedes agregar más campos a actualizar aquí si es necesario
+//         });
+
+//         // 3. Guardar los registros actualizados
+//         const promises = items.map(item => {
+//             const putRequest = store.put(item);
+//             return new Promise((resolve, reject) => {
+//                 putRequest.onsuccess = () => resolve();
+//                 putRequest.onerror = () => reject("Error al guardar el registro actualizado.");
+//             });
+//         });
+
+//         await Promise.all(promises); // Esperar a que se guarden todos los registros
+
+//         console.log("Todos los registros actualizados exitosamente.");
+//     } catch (error) {
+//         console.error("Error al actualizar los registros:", error);
+//     }
+// }
+
+// function setCurrentDateTime2() {
+//     const input = document.getElementById('fechaInput');
+//     if (!input) return;
+
+//     const now = new Date();
+    
+//     // Formato con 7 decimales (microsegundos)
+//     const year = now.getFullYear();
+//     $("#anio").val(year)
+//     const month = String(now.getMonth() + 1).padStart(2, '0');
+//     $("#mes").val()
+//     const day = String(now.getDate()).padStart(2, '0');
+//     const hours = String(now.getHours()).padStart(2, '0');
+//     const minutes = String(now.getMinutes()).padStart(2, '0');
+//     const seconds = String(now.getSeconds()).padStart(2, '0');
+//     const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+
+//     // Formato completo para SQL Server: YYYY-MM-DDTHH:MM:SS.SFFFFFFF
+//     const formatted = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}000`;
+    
+//     input.value = formatted; // Aún mostrando solo HH:MM
+//     input.setAttribute('data-full-datetime', formatted); // Almacenar el formato completo
+// }
+
+// function getFullDateTime() {
+//     const input = document.getElementById('fechaInput');
+//     const storedValue = input.getAttribute('data-full-datetime');
+    
+//     // Si no se ha guardado antes, genera uno nuevo
+//     if (storedValue) return storedValue;
+    
+//     const now = new Date();
+//     const year = now.getFullYear();
+//     const month = String(now.getMonth() + 1).padStart(2, '0');
+//     const day = String(now.getDate()).padStart(2, '0');
+//     const hours = String(now.getHours()).padStart(2, '0');
+//     const minutes = String(now.getMinutes()).padStart(2, '0');
+//     const seconds = String(now.getSeconds()).padStart(2, '0');
+//     const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+    
+//     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}000`;
+// }
+
+// function mostrarListadoFaltantes2(faltantes, muestraMap) {
+//     const contenedor = document.getElementById('listadoFaltantes');
+//     if (!contenedor || faltantes.length === 0) return;
+
+//     // Limpiar contenedor anterior
+//     contenedor.innerHTML = '';
+
+//     // Crear listado de faltantes
+//     const card = document.createElement('div');
+//     card.className = 'card mt-3';
+    
+//     const header = document.createElement('div');
+//     header.className = 'card-header bg-warning text-dark';
+//     header.textContent = 'Variedades Faltantes';
+    
+//     const listGroup = document.createElement('ul');
+//     listGroup.className = 'list-group list-group-flush';
+    
+//     // Agregar cada variedad faltante con su descripción
+//     for (const id of faltantes) {
+//         const li = document.createElement('li');
+//         li.className = 'list-group-item';
+//         const descripcion = muestraMap.get(id) || id;
+//         li.textContent = `${descripcion} (${id})`;
+//         listGroup.appendChild(li);
+//     }
+
+//     card.appendChild(header);
+//     card.appendChild(listGroup);
+//     contenedor.appendChild(card);
+// }
+
+// function limpiarFormulario2() {
+//     const variedadesSelect = document.getElementById('variedadesSelect');
+//     if (!variedadesSelect) return;
+
+//     for (const option of Array.from(variedadesSelect.options)) {
+//         option.style.backgroundColor = '';
+//     }
+// }
+
+// async function insertarSeriePrecio2() {
+//     try {
+//         // Obtener valores de los elementos del DOM
+//         const informanteSelect = document.getElementById('informantesSelect');
+//         const variedadesSelect = document.getElementById('variedadesSelect');
+//         const resultadoSelect = document.getElementById('resultadoSelect');
+//         const estadoSelect = document.getElementById('estadoSelect');
+//         const cantidadInput = document.getElementById('cantidadInput');
+//         const precioInput = document.getElementById('precioInput');
+//         const undmSelect =  document.getElementById('undmSelect');
+//         const tipomonedaSelect = document.getElementById('tipomonedaSelect');
+//         const pesoInput = document.getElementById('pesoInput');
+//         const preciosustituidoInput = document.getElementById('preciosustituidoInput');
+//         const nvecesInput = document.getElementById('nvecesInput');
+//         let ofertaActivo;
+//         const ofertaCheck = $("#ofertachk input[type='checkbox']");
+//         for (const value of ofertaCheck) {
+//             if ($(value).prop('checked') === true) {
+//                 ofertaActivo = value.value;
+//             }
+//         }
+//         let descuentoActivo;
+//         const descuentoCheck = $("#descuentochk input[type='checkbox']");
+//         for (const value of descuentoCheck) {
+//             if ($(value).prop('checked') === true) {
+//                 descuentoActivo = value.value;
+//             }
+//         }
+//         const porcentajedescuentoInput = document.getElementById('porcentajedescuentoInput');
+//         let ivaActivo;
+//         const ivaCheck = $("#ivachk input[type='checkbox']");
+//         for (const value of ivaCheck) {
+//             if ($(value).prop('checked') === true) {
+//                 ivaActivo = value.value;
+//             }
+//         }
+//         let propinaActivo;
+//         const propinaCheck = $("#propinachk input[type='checkbox']");
+//         for (const value of propinaCheck) {
+//             if ($(value).prop('checked') === true) {
+//                 propinaActivo = value.value;
+//             }
+//         }
+//         const observacionesInput = document.getElementById('observacionesInput');
+        
+        
+//         // Asumiendo que hay un campo de fecha en el formulario
+//         const fechaInput = document.getElementById('fechaInput') || { value: new Date().toISOString().split('T')[0] };
+        
+//         // Validar que existan los elementos necesarios
+//         if (!informanteSelect || !variedadesSelect) {
+//             throw new Error('Faltan elementos del formulario requeridos');
+//         }
+        
+//         // Obtener valores limpios
+//         const informanteId = informanteSelect ? informanteSelect.value.trim() : null;
+//         const variedadId = variedadesSelect ? variedadesSelect.value.trim() : null;
+//         const fecha = fechaInput.value.trim() || new Date().toISOString().split('T')[0];
+//         const resultado = resultadoSelect ? resultadoSelect.value.trim() : null;
+//         const estado = estadoSelect ? estadoSelect.value.trim() : null;
+//         const cantidad = cantidadInput ? Number.parseInt(cantidadInput.value.trim(), 10) : 0;
+//         const precio = precioInput ? Number.parseFloat(precioInput.value.trim()) : 0;
+//         const undm =  undmSelect.value.trim();
+//         const tipomoneda = tipomonedaSelect ? tipomonedaSelect.value.trim() : null;
+//         const peso = pesoInput ? Number.parseInt(pesoInput.value.trim(), 10) : 0;
+//         const preciosustituido = preciosustituidoInput ? Number.parseFloat(preciosustituidoInput.value.trim()) : 0;
+//         const nveces = nvecesInput ? Number.parseInt(nvecesInput.value.trim(), 10) : 0;
+//         const oferta = ofertaActivo;
+//         const descuento = descuentoActivo;
+//         const porcentajedescuento = porcentajedescuentoInput ? Number.parseFloat(porcentajedescuentoInput.value.trim()) : 0;
+//         const iva = ivaActivo;
+//         const propina = propinaActivo;
+//         const observaciones =  observacionesInput ? observacionesInput.value.trim() : '';
+
+//         // Validar datos obligatorios
+//         if (!informanteId || !variedadId) {
+//             throw new Error('Debe seleccionar un informante y una variedad');
+//         }
+        
+//         // Crear objeto con datos a insertar
+//         const seriePrecio = {
+//             InformanteId: informanteId,
+//             VariedadId: variedadId,
+//             Fecha: fecha,
+//             Resultado: resultado,
+//             Estado: estado,
+//             Cantidad: cantidad,
+//             Precio: precio, // Valor por defecto - podría venir de otro campo
+//             Undm: undm, 
+//             TipoMoneda: tipomoneda,
+//             Peso: peso,
+//             PrecioSustituido: preciosustituido,
+//             Nveces: nveces,
+//             Oferta: oferta,
+//             Descuento: descuento,
+//             PorcentajeDescuento: porcentajedescuento,
+//             Iva: iva,
+//             Propina: propina,
+//             Observaciones: observaciones
+//             //Activo: true // Estado inicial
+//         };
+        
+//         // Conectar a la base de datos
+//         const db = await IniciarBaseDatos();
+        
+//         // Iniciar transacción
+//         const transaction = db.transaction('SeriesPrecios', 'readwrite');
+//         const store = transaction.objectStore('SeriesPrecios');
+        
+//         // Insertar registro
+//         const request = store.put(seriePrecio);
+        
+//         // Manejar éxito
+//         request.onsuccess = () => {
+//             console.log('Registro insertado/actualizado:', seriePrecio);
+//             mostrarMensaje('Registro guardado exitosamente', 'success');
+            
+//             // Opcional: Limpiar formulario o actualizar listados
+//             if (variedadesSelect) {
+//                 variedadesSelect.selectedIndex = -1;
+//             }
+//             if (fechaInput && !fechaInput.readOnly) {
+//                 fechaInput.value = new Date().toISOString().split('T')[0];
+//             }
+//         };
+        
+//         // Manejar errores
+//         transaction.onerror = (event) => {
+//             console.error('Error en transacción:', event.target.error);
+//             mostrarMensaje(`Error al guardar: ${event.target.error.message}`, 'danger');
+//         };
+        
+//         // Completar transacción
+//         await new Promise((resolve, reject) => {
+//             transaction.oncomplete = resolve;
+//             transaction.onerror = reject;
+//         });
+        
+//         return {
+//             success: true,
+//             message: 'Registro guardado exitosamente',
+//             data: seriePrecio
+//         };
+
+//     } catch (error) {
+//         console.error('Error en insertarSeriePrecio:', error);
+//         mostrarMensaje(`Error: ${error.message}`, 'danger');
+//         return {
+//             success: false,
+//             message: error.message
+//         };
+//     }
+// }
+
+// async function cargarSelect1(storeName, selectElement, keyField, displayField, sortField, filterField = null, filterValue = null) {
+//     try {
+//         const db = await IniciarBaseDatos();
+//         const transaction = db.transaction(storeName, 'readonly');
+//         const store = transaction.objectStore(storeName);
+
+//         // ✅ Usar el índice si existe
+//         let dataSource = store;
+//         if (filterField && store.indexNames.contains(filterField)) {
+//             dataSource = store.index(filterField);
+//         }
+
+//         // ✅ Usar getAll si hay filtro, o openCursor si no
+//         const items = [];
+
+//         if (!filterValue) {
+//             // ✅ Usar getAll si hay valor de filtro
+//             const getAllRequest = dataSource.getAll(filterValue);
+            
+//             getAllRequest.onsuccess = () => {
+//                 const resultados = getAllRequest.result || [];
+                
+//                 resultados.sort((a, b) => a[sortField].localeCompare(b[sortField]));
+
+//                 selectElement.innerHTML = '';
+//                 if (resultados.length > 0) {
+//                     for (const item of resultados) {
+//                         const option = document.createElement('option');
+//                         option.value = item[keyField];
+//                         option.textContent = item[displayField];
+//                         selectElement.appendChild(option);
+//                         selectElement.selectedIndex = -1;
+//                     }
+//                 } else {
+//                     selectElement.innerHTML = '<option value="">No hay datos disponibles</option>';
+//                 }
+
+//                 $(selectElement).trigger('change');
+//             };
+
+//             getAllRequest.onerror = (e) => {
+//                 console.error("Error al obtener datos filtrados:", e.target.error);
+//                 selectElement.innerHTML = '<option value="">Error al cargar datos</option>';
+//                 $(selectElement).trigger('change');
+//             };
+//         } else {
+//             // ❌ Si no hay filtro, seguir usando cursor para obtener todos
+//             const cursorRequest = dataSource.openCursor();
+
+//             cursorRequest.onsuccess = (event) => {
+//                 const cursor = event.target.result;
+//                 if (cursor) {
+//                     const item = cursor.value;
+
+//                     // ✅ Asegurarse de que el campo tenga el valor esperado
+//                     if (!filterField || item[filterField] === filterValue) {
+//                         items.push(item);
+//                     }
+
+//                     cursor.continue();
+//                 } else {
+//                     items.sort((a, b) => a[sortField].localeCompare(b[sortField]));
+
+//                     selectElement.innerHTML = '';
+//                     if (items.length > 0) {
+//                         for (const item of items) {
+//                             const option = document.createElement('option');
+//                             option.value = item[keyField];
+//                             option.textContent = item[displayField];
+//                             selectElement.appendChild(option);
+//                             selectElement.selectedIndex = -1;
+//                         }
+//                     } //else {
+//                       //  selectElement.innerHTML = '<option value="">No hay datos disponibles</option>';
+//                     //}
+
+//                     $(selectElement).trigger('change');
+//                 }
+//             };
+
+//             cursorRequest.onerror = (e) => {
+//                 console.error("Error al abrir cursor:", e.target.error);
+//                 selectElement.innerHTML = '<option value="">Error al cargar datos</option>';
+//                 $(selectElement).trigger('change');
+//             };
+//         }
+
+//     } catch (error) {
+//         console.error(`Error al cargar ${storeName}:`, error);
+//         selectElement.innerHTML = '<option value="">Error de conexión</option>';
+//         $(selectElement).trigger('change');
+//     }
+// }
+
+// async function cargarSeriePrecio3(informanteId, variedadId) {
+//     try {
+//         // Validar que los parámetros sean válidos
+//         if (!informanteId || !variedadId) {
+//             throw new Error('Informante y Variedad son requeridos');
+//         }
+
+//         // Limpiar espacios en los valores
+//         const cleanInformante = informanteId.trim();
+//         const cleanVariedad = variedadId.trim();
+
+//         // Abrir la base de datos
+//         const db = await IniciarBaseDatos();
+//         const transaction = db.transaction('SeriesPrecios', 'readonly');
+//         const store = transaction.objectStore('SeriesPrecios');
+
+//         // ✅ Verificar si existe el índice necesario
+//         if (!store.indexNames.contains('BuscarPorInformanteYVariedad')) {
+//             throw new Error('Índice BuscarPorInformanteYVariedad no encontrado');
+//         }
+
+//         // ✅ Usar índice y rango de clave para búsqueda directa
+//         const index = store.index('BuscarPorInformanteYVariedad');
+//         const keyRange = IDBKeyRange.only([cleanInformante, cleanVariedad]);
+//         const cursorRequest = index.openCursor(keyRange);
+
+//         //?const request = store.openCursor();
+//         const resultados = [];
+    
+//         //?request.onsuccess = (event) => {
+//         cursorRequest.onsuccess = (event) => {
+//             const cursor = event.target.result;
+//             if (cursor) {
+//                 // Agregar el registro encontrado
+//                 resultados.push(cursor.value);                
+
+//                 //? const record = cursor.value;
+                
+//                 //? Filtrar manualmente por InformanteId y VariedadId
+//                 //?if (record.InformanteId === cleanInformante && record.VariedadId === cleanVariedad) {
+//                 //?    resultados.push(record);
+//                 //? }
+//                 cursor.continue();
+//             } else {
+//                 // Procesar resultados
+//                 if (resultados.length > 0) {
+//                     rellenarFormulario(resultados[0]); 
+//                     //? Seleccionar el registro más reciente por fecha
+//                     //? const registroMasReciente = resultados.reduce((latest, current) => {
+//                     //?    return new Date(current.Fecha) > new Date(latest.Fecha) ? current : latest;
+//                     //? });
                     
-                    // Rellenar el formulario
-                    //? rellenarFormulario(registroMasReciente);
-                } else {
-                    // No hay registros
-                    mostrarMensaje("No se ha ingresado Serie Precio", "warning");
-                }
-            }
-        };
+//                     // Rellenar el formulario
+//                     //? rellenarFormulario(registroMasReciente);
+//                 } else {
+//                     // No hay registros
+//                     mostrarMensaje("No se ha ingresado Serie Precio", "warning");
+//                 }
+//             }
+//         };
 
-        cursorRequest.onerror = (event) => {
-            console.error('Error al buscar en SeriesPrecios:', event.target.error);
-            mostrarMensaje(`Error al buscar serie de precio: ${event.target.error.message}`, "danger");
-        };
+//         cursorRequest.onerror = (event) => {
+//             console.error('Error al buscar en SeriesPrecios:', event.target.error);
+//             mostrarMensaje(`Error al buscar serie de precio: ${event.target.error.message}`, "danger");
+//         };
 
-    } catch (error) {
-        console.error('Error en cargarSeriePrecio:', error);
-        mostrarMensaje(`Error al procesar los datos: ${error.message}`, "danger");
-    }
-}
+//     } catch (error) {
+//         console.error('Error en cargarSeriePrecio:', error);
+//         mostrarMensaje(`Error al procesar los datos: ${error.message}`, "danger");
+//     }
+// } 

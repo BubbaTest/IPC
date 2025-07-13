@@ -6,7 +6,7 @@ function getCacheName(version) {
 }
 
 // Definir versiones para control de caché
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.0.15';
 const CACHE_STATIC_NAME = getCacheName(`static-${CACHE_VERSION}`);
 const CACHE_DYNAMIC_NAME = getCacheName(`dynamic-${CACHE_VERSION}`);
 const CACHE_INMUTABLE_NAME = getCacheName(`inmutable-${CACHE_VERSION}`);
@@ -14,7 +14,7 @@ const CACHE_INMUTABLE_NAME = getCacheName(`inmutable-${CACHE_VERSION}`);
 // Página offline para fallback
 const OFFLINE_PAGE = '/offline.html';
 
-// Recursos estáticos propios de la app
+// Recursos estáticos propios de la appa
 const ASSETS_TO_CACHE_STATIC = [
     '/',
     'favicon.ico',
@@ -24,15 +24,12 @@ const ASSETS_TO_CACHE_STATIC = [
     '/ExportarMuestra.html',
     '/ListarMuestra.html',
     '/ListaInformantePendientes.html',
-    '/ListaPesablePendientes.html',
+    '/ListaPesablePendiente.html',
     '/MantCat.html',
     '/offline.html',
     '/img/icon-192.png',
     '/img/icon-512.png',
     '/img/Inide.png',
-    '/screenshots/main.png',
-    '/screenshots/config.png',
-    '/screenshots/capture.png',
     '/Controller/Muestra.js',
     '/Controller/BaseDatos.js',
 ];

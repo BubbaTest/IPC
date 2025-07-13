@@ -15,10 +15,28 @@
             <input type="text" id="empleado" class="form-control" placeholder="Empleado">
         </div>
       </div>
+      <div class="col-md-2">
+        <div class="form-group">
+          <label class="has-float-label" data-toggle="tooltip" data-placement="top" title="Semana">
+            <select id="semanasSelect" class="form-select sel" aria-label="Default select example" required>
+            </select>
+            <span>Semana:</span>
+          </label>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <div class="form-group">
+          <label class="has-float-label" data-toggle="tooltip" data-placement="top" title="Días">
+            <select id="diasSelect" class="form-select sel" aria-label="Default select example" required>
+            </select>
+            <span>Días:</span>
+          </label>
+        </div>
+      </div>
     </div>
   </fieldset>
 
-  <div class="row  justify-content-center mt-1">
+  <div class="row  justify-content-center mt-1">   
     <div class="col-md-6 d-flex justify-content-center">
       <button type="button" class="btn btn-success" id="btnValidar" data-tabcontinuar="data-tabcontinuar" onclick="ValidarMuestra()">
         <span>Validar</span>

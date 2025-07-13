@@ -23,6 +23,11 @@
             width: 100%;
             }
         }
+
+        a, button {
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0); /* Sin color de resaltado */
+        }
+
         #message {
             text-align: center;
         }
@@ -50,9 +55,20 @@
 
     </style>
 
-    <!-- Fuentes -->
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat :wght@400;600&display=swap" rel="stylesheet">
-
+    <!-- <link rel="manifest" href="/manifest.json"> -->
+    <!-- <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado con éxito:', registration);
+                    })
+                    .catch(error => {
+                        console.error('Error registrando Service Worker:', error);
+                    });
+            });
+        }
+    </script> -->
     <!-- Scripts principales -->
     <script src="Scripts/bootstrap.bundle.min.js"></script>
     <script src="Scripts/jquery-3.5.1.min.js"></script>
@@ -116,8 +132,8 @@
     <input type="hidden" id="lblLongitud">
     <input type="hidden" id="lblLatitud">
 
-    <script src="Controller/BaseDatos.js"></script>
-    <script src="Controller/Muestra.js"></script>
+    <script async src="Controller/BaseDatos.js"></script>
+    <script async src="Controller/Muestra.js"></script>
 
     <script>   
          // Función para colapsar el menú
@@ -128,7 +144,6 @@
             });
         }
         
-         //const usuariocookie = getCookie('Benutzer');
         const usuarioStr = localStorage.getItem('Benutzer'); 
         if (!usuarioStr) {
             document.getElementById("mensajeModal").textContent = "Debes iniciar sesión para acceder a esta página.";
@@ -167,8 +182,19 @@
                             width: '100%'
                         });
                         
-                        $(".mask").inputmask('Regex', { regex: "^[0-9,]{1,12}(\\.\\d{1,2})?$" });
+                        //$(".mask").inputmask('Regex', { regex: "^[0-9,]{1,12}(\\.\\d{1,2})?$" });
+                        
                     }
+                    else if (view === 'ListaInformantePendientes.html' || view === 'ListaPesablePendiente.html') {
+                        initListarCombos();                       
+                        
+                        // 🔍 Inicializar Select2 después de cargar los datos
+                        $('.sel').select2({
+                            placeholder: 'Seleccionar opción',
+                            allowClear: true,
+                            width: '100%'
+                        });
+                    }   
                     
                     // Ejecutar el callback si se proporciona
                     if (typeof callback === 'function') {
@@ -184,28 +210,20 @@
         }
 
         function getLocation() {
-                setTimeout(() => {
-                    const options = {
-                        enableHighAccuracy: true,
-                        timeout: 5000,
-                        maximumAge: 0,
-                    };
-
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition(useLocation, handleError, options);
-                        // navigator.geolocation.watchPosition(useLocation, 
-                        //     error => console.log(error), 
-                        //     options
-                        // )
-                        // Si quieres observar cambios en la ubicación, puedes usar esto:
-                        // navigator.geolocation.watchPosition(useLocation, handleError, options);
-
-                    } else {
-                        console.error("La geolocalización no es soportada por este navegador.");
-                        alert("La geolocalización no es soportada por este navegador.");
-                    }
-                }, 2000); 
-            };
+            setTimeout(() => {
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 10000, // Aumentar el tiempo de espera a 10 segundos
+                    maximumAge: 60000 // Usar una ubicación almacenada en caché de hasta 1 minuto
+                };
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(useLocation, handleError, options);
+                } else {
+                    console.error("La geolocalización no es soportada por este navegador.");
+                    alert("La geolocalización no es soportada por este navegador.");
+                }
+            }, 2000); 
+        }
 
         function useLocation(position) {            
             document.getElementById("lblLongitud").value = position.coords.longitude;
@@ -236,6 +254,8 @@
 
         async function ValidarMuestra() {
             const Empleado = document.querySelector('#empleado').value.toUpperCase();
+            const semanas = document.querySelector('#semanasSelect').value;
+            const dias = document.querySelector('#diasSelect').value;
 
              // Validar al menos un empleado seleccionado
             if (!Empleado) {
@@ -243,8 +263,18 @@
                 return;
             }
 
+            if (!semanas) {
+                mostrarMensaje('Por favor seleccione Semana.', "error"); 
+                return;
+            }
+
+            if (!dias) {
+                mostrarMensaje('Por favor seleccione Día.', "error"); 
+                return;
+            }
+
             try {
-                const result = await obtenerValidaMuestra(Empleado);
+                const result = await obtenerValidaMuestra(Empleado, semanas, dias);
                 if (result.success) {
                     mostrarMensaje(`Validación de muestra exitosa. ${result.message}`, "success");
                 } else {
@@ -256,8 +286,20 @@
         }
 
         async function ValidarPesable() {
+            const semanas = document.querySelector('#semanasSelect').value;
+            const dias = document.querySelector('#diasSelect').value;
+            if (!semanas) {
+                mostrarMensaje('Por favor seleccione Semana.', "error"); 
+                return;
+            }
+
+            if (!dias) {
+                mostrarMensaje('Por favor seleccione Día.', "error"); 
+                return;
+            }
+
             try {
-                const result = await mostrarPesableFaltante();
+                const result = await mostrarPesableFaltante(semanas, dias);
 
                 if (result.success) {
                 mostrarMensaje(`Validación de pesables exitosa. ${result.message}`, "success");
